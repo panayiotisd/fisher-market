@@ -22,6 +22,8 @@ from fishery_market_environment import fishery_market_environment
 import argparse
 import datetime
 import pickle
+import pickletools
+import gzip
 import os
 import math
 import numpy as np
@@ -67,7 +69,7 @@ def generate_env_fn(env_context=None):
 
 
 # Log saving function
-def save_log(log_dir, ep_memory):
+def save_log(log_dir, ep_memory, ag_memory):
     # print('---------------------------------------------save_log')
 
     log = {'n_harvesters' : n_harvesters,
@@ -76,7 +78,7 @@ def save_log(log_dir, ep_memory):
           'skill_level' : skill_level,
           'growth_rate' : growth_rate,
           'S_eq' : S_eq,
-          'num_workers' : num_workers,
+          'Ms' : Ms,
           'max_steps' : max_steps,
           'threshold' : threshold,
           'harvester_wastefulness_cost' : harvester_wastefulness_cost,
@@ -88,15 +90,64 @@ def save_log(log_dir, ep_memory):
           'fairness_metric' : fairness_metric,
           'random_seed' : random_seed,
           'compute_market_eq' : compute_market_eq,
+          'num_workers' : num_workers,
+          'n_episodes' : n_episodes,
+          'train_algo' : train_algo,
+          'lr' : lr,
+          'gamma' : gamma,
+          'hidden_layer_size' : hidden_layer_size,
           'episodes': ep_memory}
-    filename = "logs_H_{0}_B_{1}_R_{2}_{3}_{4:%H_%M_%S_%d%m%Y}".format(n_harvesters, n_buyers, n_resources, compute_market_eq, start_time)
+
+    filename = "logs_ep_memory_H_{0}_B_{1}_R_{2}_{3}_{4:%Y%m%d_%H_%M_%S_%f}".format(n_harvesters, n_buyers, n_resources, compute_market_eq, start_time)
     path = log_dir + '/' + filename
     try:
-        print("Saving episode logs to: {}".format(path))
-        with open(path, "wb") as fp:
-            pickle.dump(log, fp)
+        print("Saving ep_memory logs to: {}".format(path))
+        with gzip.open(path, "wb") as fp:
+            # pickle.dump(log, fp)
+			pickled = pickle.dumps(log)
+			optimized_pickle = pickletools.optimize(pickled)
+			fp.write(optimized_pickle)
     except:
-        print("An exception occurred while saving episode logs to {}!".format(path))
+        print("An exception occurred while saving ep_memory logs to {}!".format(path))
+
+
+    log = {'n_harvesters' : n_harvesters,
+          'n_buyers' : n_buyers,
+          'n_resources' : n_resources,
+          'skill_level' : skill_level,
+          'growth_rate' : growth_rate,
+          'S_eq' : S_eq,
+          'Ms' : Ms,
+          'max_steps' : max_steps,
+          'threshold' : threshold,
+          'harvester_wastefulness_cost' : harvester_wastefulness_cost,
+          'policymaker_harvesters_welfare_weight' : policymaker_harvesters_welfare_weight,
+          'policymaker_buyers_welfare_weight' : policymaker_buyers_welfare_weight,
+          'policymaker_fairness_weight' : policymaker_fairness_weight,
+          'policymaker_wastefulness_weight' : policymaker_wastefulness_weight,
+          'policymaker_sustainability_weight' : policymaker_sustainability_weight,
+          'fairness_metric' : fairness_metric,
+          'random_seed' : random_seed,
+          'compute_market_eq' : compute_market_eq,
+          'num_workers' : num_workers,
+          'n_episodes' : n_episodes,
+          'train_algo' : train_algo,
+          'lr' : lr,
+          'gamma' : gamma,
+          'hidden_layer_size' : hidden_layer_size,
+          'episodes': ag_memory}
+
+    filename = "logs_ag_memory_H_{0}_B_{1}_R_{2}_{3}_{4:%Y%m%d_%H_%M_%S_%f}".format(n_harvesters, n_buyers, n_resources, compute_market_eq, start_time)
+    path = log_dir + '/' + filename
+    try:
+        print("Saving ag_memory logs to: {}".format(path))
+        with gzip.open(path, "wb") as fp:
+            # pickle.dump(log, fp)
+			pickled = pickle.dumps(log)
+			optimized_pickle = pickletools.optimize(pickled)
+			fp.write(optimized_pickle)
+    except:
+        print("An exception occurred while saving ag_memory logs to {}!".format(path))
 
 
 # policy mapping function
@@ -185,6 +236,7 @@ def on_episode_end(info):
 
     global ep_number
     global ep_memory
+    global ag_memory
     
     episode = info["episode"]
 
@@ -215,9 +267,11 @@ def on_episode_end(info):
     # print('--------------------------------------------- ep_number = ' + str(ep_number))
     # if ep_number < n_episodes:
 
-    # Add data to episode memory
-    ep_memory.append({'ep_number': ep_number, 'ep_len': episode.length,
+    # Add data to agent and episode memory (we split into two to make the pickled files more manageable in size)
+    ag_memory.append({'ep_number': ep_number, 'ep_len': episode.length,
                     'actions': actions, 'observations': observations,
+                    'metrics':{'H_rew': harvester_cumulative_reward, 'H_fair' : harvester_fairness_at_end}})
+    ep_memory.append({'ep_number': ep_number, 'ep_len': episode.length,
                     'agent_rewards': agent_rewards,
                     'harvester_fairness_at_end' : harvester_fairness_at_end,
                     'harvester_fairness': harvester_fairness,
@@ -225,14 +279,13 @@ def on_episode_end(info):
                     'harvester_rewards': harvester_rewards,
                     'harvester_revenue': harvester_revenue,
                     'wasted_percentage': wasted_percentage,
-                    'buyers_utility': buyers_utility,
-                    'metrics':{'H_rew': harvester_cumulative_reward, 'H_fair' : harvester_fairness_at_end}})
+                    'buyers_utility': buyers_utility})
   
     
     # Save periodically and at the end
     if (((ep_number + 1) * num_workers) % epdata_save_freq == 0) or (((ep_number + 1) * num_workers) >= n_episodes):
         print("on_episode_end: Saving log at ep_number = " + str(ep_number))
-        save_log(log_dir, ep_memory)
+        save_log(log_dir, ep_memory, ag_memory)
 
     ep_number += 1
 
@@ -262,7 +315,7 @@ def on_train_result(info):
 
     # print(results_info)
 
-    filename = "train_result_info_H_{0}_B_{1}_R_{2}_{3}_{4:%H_%M_%S_%d%m%Y}".format(n_harvesters, n_buyers, n_resources, compute_market_eq, start_time)
+    filename = "train_result_info_H_{0}_B_{1}_R_{2}_{3}_{4:%Y%m%d_%H_%M_%S_%f}".format(n_harvesters, n_buyers, n_resources, compute_market_eq, start_time)
     path = log_dir + '/' + filename
     try:
         print("Saving training results info to: {}".format(path))
@@ -329,7 +382,7 @@ policymaker_wastefulness_weight = 0		# FIXME: 0?
 policymaker_sustainability_weight = 1.0
 fairness_metric = 'jain'
 
-compute_market_eq = False
+compute_market_eq = False # True False ######################################################################################################################
 random_seed = 42
 debug = False
 
@@ -343,7 +396,7 @@ lr = 1e-4
 gamma = 0.99
 lambda_trainer = 1.0
 
-num_workers = 1
+num_workers = 1 # 1 10 ######################################################################################################################
 num_cpus_per_worker = 1 # This avoids running out of resources in the notebook environment when this cell is re-executed
 num_gpus = 0
 num_gpus_per_worker = 0
@@ -382,13 +435,14 @@ start_time = datetime.datetime.now()
 # Initialize global variables for the callback functions
 ep_number = 0
 ep_memory = []
+ag_memory = []
 
 
 if not os.path.exists(log_dir):
   os.makedirs(log_dir)
 
 # Create checkpoint directory
-folder_name = "checkpoint_H_{0}_B_{1}_R_{2}_{3}_{4:%H_%M_%S_%d%m%Y}".format(n_harvesters, n_buyers, n_resources, compute_market_eq, start_time)
+folder_name = "checkpoint_H_{0}_B_{1}_R_{2}_{3}_{4:%Y%m%d_%H_%M_%S_%f}".format(n_harvesters, n_buyers, n_resources, compute_market_eq, start_time)
 folder_name = folder_name.replace(".", "p")
 
 checkpoint_folder = checkpoint_dir + '/' + folder_name
@@ -400,7 +454,7 @@ ray.shutdown()
 ray.init(num_gpus=num_gpus, ignore_reinit_error=True)
 
 # Initialize environment
-env_title = "env_H_{0}_B_{1}_R_{2}_{3}_{4:%H_%M_%S_%d%m%Y}".format(n_harvesters, n_buyers, n_resources, compute_market_eq, start_time)
+env_title = "env_H_{0}_B_{1}_R_{2}_{3}_{4:%Y%m%d_%H_%M_%S_%f}".format(n_harvesters, n_buyers, n_resources, compute_market_eq, start_time)
 print("Environment name: " + env_title)
 register_env(env_title, generate_env_fn)  # Register environment
 env = generate_env_fn() # Create environment
@@ -528,8 +582,10 @@ while episodes_counter < n_episodes:
   #         eplen_max_base_reward = episode_reward
   #         eplen_max_start_ep = episodes_counter
 
-
+  print('\n-------------------------------------------------------------------------')
   print(pretty_print(result))
+  print('-------------------------------------------------------------------------\n')
+
 
   if (episodes_counter - last_checkpoint) >= checkpoint_interval:
     print("Creating a checkpoint of the trainer at episodes_counter = " + str(episodes_counter))

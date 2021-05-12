@@ -435,7 +435,10 @@ class fishery_market_environment(MultiAgentEnv):
 			constraints=constraints,
 			# bounds=bounds,
 			method='trust-constr',
-			tol=1e-20
+			# tol=1e-20
+			options={'gtol':1e-12,
+			'xtol':1e-12,
+			'barrier_tol':1e-12},
 		)
 
 		assert res.success, res

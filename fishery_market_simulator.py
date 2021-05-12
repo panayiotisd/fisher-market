@@ -38,7 +38,7 @@ from ray.tune.registry import register_env
 from ray.tune.logger import pretty_print
 from ray.rllib.policy.policy import Policy
 from ray.rllib.agents.ppo.ppo import PPOTrainer
-from ray.rllib.agents.ddpg.ddpg import DDPGTrainer
+# from ray.rllib.agents.ddpg.ddpg import DDPGTrainer
 
 
 ###########################################
@@ -104,9 +104,9 @@ def save_log(log_dir, ep_memory, ag_memory):
         print("Saving ep_memory logs to: {}".format(path))
         with gzip.open(path, "wb") as fp:
             # pickle.dump(log, fp)
-			pickled = pickle.dumps(log)
-			optimized_pickle = pickletools.optimize(pickled)
-			fp.write(optimized_pickle)
+          pickled = pickle.dumps(log)
+          optimized_pickle = pickletools.optimize(pickled)
+          fp.write(optimized_pickle)
     except:
         print("An exception occurred while saving ep_memory logs to {}!".format(path))
 
@@ -143,9 +143,9 @@ def save_log(log_dir, ep_memory, ag_memory):
         print("Saving ag_memory logs to: {}".format(path))
         with gzip.open(path, "wb") as fp:
             # pickle.dump(log, fp)
-			pickled = pickle.dumps(log)
-			optimized_pickle = pickletools.optimize(pickled)
-			fp.write(optimized_pickle)
+          pickled = pickle.dumps(log)
+          optimized_pickle = pickletools.optimize(pickled)
+          fp.write(optimized_pickle)
     except:
         print("An exception occurred while saving ag_memory logs to {}!".format(path))
 
@@ -355,22 +355,69 @@ def gini_coefficient_fn(rewards):
   return G
 
 
+def str2bool(v):
+  if isinstance(v, bool):
+    return v
+  if v.lower() in ('yes', 'true', 't', 'y', '1'):
+    return True
+  elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+    return False
+  else:
+    raise argparse.ArgumentTypeError('Boolean value expected.')
+
 ###########################################
 #@title Definition of Parameters
 ###########################################
 
 
+# *** Parse command arguments ***
+parser = argparse.ArgumentParser()
+
+# Environments arguments
+parser.add_argument('--n_harvesters', default=8, type=int)
+parser.add_argument('--n_buyers', default=8, type=int)
+parser.add_argument('--n_resources', default=4, type=int)
+parser.add_argument('--Ms', default=0.8, type=float)
+parser.add_argument('--compute_market_eq', default=False, type=str2bool)
+
+# Training arguments
+parser.add_argument('--n_episodes', default=5000, type=int)
+parser.add_argument('--max_steps', default=500, type=int)
+
+# Workers (parallelism)
+parser.add_argument('--num_workers', default=1, type=int)
+parser.add_argument('--num_cpus_per_worker', default=1, type=int)
+
+
+args = parser.parse_args()
+
+print("-----------------------------------------")
+print("Parsed arguments:")
+print("n_harvesters = " + str(args.n_harvesters))
+print("n_buyers = " + str(args.n_buyers))
+print("n_resources = " + str(args.n_resources))
+print("Ms = " + str(args.Ms))
+print("compute_market_eq = " + str(args.compute_market_eq))
+
+print("n_episodes = " + str(args.n_episodes))
+print("max_steps = " + str(args.max_steps))
+
+print("num_workers = " + str(args.num_workers))
+print("num_cpus_per_worker = " + str(args.num_cpus_per_worker))
+print("-----------------------------------------")
+
+
 # ******** Environment Parameters ********
 n_policymakers = 1
-n_harvesters = 8
-n_buyers = 8
-n_resources = 4
+n_harvesters = args.n_harvesters # default: 8
+n_buyers = args.n_buyers # default: 8
+n_resources = args.n_resources # default: 4
 # skill_level = np.array([[1, 0.5], [0.5, 1]])
 skill_level = np.ones([n_harvesters, n_resources], dtype=np.float64) / 2.0
 np.fill_diagonal(skill_level, 1, wrap=True)
 growth_rate = np.ones(n_resources)
 LSH = 0.79 # constant for the limit of sustainable harvesting (K)
-Ms = 0.8
+Ms = args.Ms  #  default: 0.8
 S_eq = np.array([Ms * LSH * n_harvesters] * n_resources)
 
 threshold = 1e-4
@@ -382,22 +429,22 @@ policymaker_wastefulness_weight = 0		# FIXME: 0?
 policymaker_sustainability_weight = 1.0
 fairness_metric = 'jain'
 
-compute_market_eq = False # True False ######################################################################################################################
+compute_market_eq = args.compute_market_eq  #  default: False
 random_seed = 42
 debug = False
 
 
 # ******** Training Parameters ********
-n_episodes = 5000
-max_steps = 500
+n_episodes = args.n_episodes  # default: 5000
+max_steps = args.max_steps  # default: 500
 
 train_algo = "PPO"
 lr = 1e-4
 gamma = 0.99
 lambda_trainer = 1.0
 
-num_workers = 1 # 1 10 ######################################################################################################################
-num_cpus_per_worker = 1 # This avoids running out of resources in the notebook environment when this cell is re-executed
+num_workers = args.num_workers # default: 1
+num_cpus_per_worker = args.num_cpus_per_worker # default 1 # If run from notebook, this should be 0. This avoids running out of resources in the notebook environment when this cell is re-executed
 num_gpus = 0
 num_gpus_per_worker = 0
 

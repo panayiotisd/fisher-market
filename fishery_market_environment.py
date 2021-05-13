@@ -436,9 +436,9 @@ class fishery_market_environment(MultiAgentEnv):
 			# bounds=bounds,
 			method='trust-constr',
 			# tol=1e-20
-			options={'gtol':1e-12,
-			'xtol':1e-12,
-			'barrier_tol':1e-12},
+			options={'gtol':1e-3,
+			'xtol':1e-3,
+			'barrier_tol':1e-3}, # Tolerances provide a trade-off between solution accuracy and speed. 1e-3 results in +-1e-2 close to the optimal, in 1.37+-0.66 sec of computation time
 		)
 
 		assert res.success, res
@@ -450,7 +450,7 @@ class fishery_market_environment(MultiAgentEnv):
 
 		sold_resources = np.sum(allocation, 1)
 		assert sold_resources.shape == (self.n_resources,)
-		assert np.allclose(sold_resources, cumulative_harvest, rtol=0, atol=1e-02), 'cumulative_harvest = ' + str(cumulative_harvest) + '\n sold_resources = ' + str(sold_resources)
+		assert np.allclose(sold_resources, cumulative_harvest, rtol=0, atol=0.05), 'cumulative_harvest = ' + str(cumulative_harvest) + '\n sold_resources = ' + str(sold_resources)
 
 		sold_resources = np.copy(cumulative_harvest) # At market equilibrium, we sell the entire harvest
 

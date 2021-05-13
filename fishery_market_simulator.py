@@ -381,7 +381,7 @@ parser.add_argument('--Ms', default=0.8, type=float)
 parser.add_argument('--compute_market_eq', default=False, type=str2bool)
 
 # Training arguments
-parser.add_argument('--n_episodes', default=5000, type=int)
+parser.add_argument('--n_episodes', default=3000, type=int)
 parser.add_argument('--max_steps', default=500, type=int)
 
 # Workers (parallelism)
@@ -435,7 +435,7 @@ debug = False
 
 
 # ******** Training Parameters ********
-n_episodes = args.n_episodes  # default: 5000
+n_episodes = args.n_episodes  # default: 3000
 max_steps = args.max_steps  # default: 500
 
 train_algo = "PPO"
@@ -478,6 +478,7 @@ reward_decrease_limit = 0.95  # ratio of reward decrease limit
 
 # Initialize simulation
 start_time = datetime.datetime.now()
+print("--- Simulation started at {0:%Y%m%d_%H_%M_%S_%f} ---".format(start_time))
 
 # Initialize global variables for the callback functions
 ep_number = 0

@@ -294,6 +294,9 @@ class fishery_market_environment(MultiAgentEnv):
 		if np.array_equal(cumulative_harvest, np.zeros(self.n_resources)):
 			return np.zeros(self.n_resources), np.zeros(self.n_buyers)
 
+		if np.allclose(cumulative_harvest, np.zeros(self.n_resources), rtol=0, atol=9e-3):
+			return np.zeros(self.n_resources), np.zeros(self.n_buyers)
+
 		cumulative_harvest[cumulative_harvest <=0 ] = 1e-6	# Ensure there are no zeros
 
 		# Volume constraints:
@@ -381,7 +384,7 @@ class fishery_market_environment(MultiAgentEnv):
 
 
 
-	def fisher_market_equilibrium_calculator_fn(self, cumulative_harvest, budgets, valuations):
+	def fisher_market_equilibrium_calculator_fn(self, cumulative_harvest, budgets, valuations, tolerance=1e-3):
 		# See https://www.ics.uci.edu/~vazirani/market.pdf
 		assert cumulative_harvest.shape == (self.n_resources,), cumulative_harvest
 		assert budgets.shape == (self.n_buyers,), budgets
@@ -389,6 +392,9 @@ class fishery_market_environment(MultiAgentEnv):
 
 		if np.array_equal(cumulative_harvest, np.zeros(self.n_resources)):
 			return np.zeros(self.n_resources), np.zeros(self.n_buyers), np.zeros(self.n_resources)
+
+		if np.allclose(cumulative_harvest, np.zeros(self.n_resources), rtol=0, atol=9e-3):
+			return cumulative_harvest, np.zeros(self.n_buyers), np.zeros(self.n_resources)
 
 		cumulative_harvest[cumulative_harvest <=0 ] = 1e-6	# Ensure there are no zeros
 
@@ -436,9 +442,10 @@ class fishery_market_environment(MultiAgentEnv):
 			# bounds=bounds,
 			method='trust-constr',
 			# tol=1e-20
-			options={'gtol':1e-3,
-			'xtol':1e-3,
-			'barrier_tol':1e-3}, # Tolerances provide a trade-off between solution accuracy and speed. 1e-3 results in +-1e-2 close to the optimal, in 1.37+-0.66 sec of computation time
+			options={'gtol':tolerance,
+			'xtol':tolerance,
+			'barrier_tol':tolerance,  # Tolerances provide a trade-off between solution accuracy and speed. 1e-3 results in +-1e-2 close to the optimal, in 1.37+-0.66 sec of computation time
+			'maxiter':2000},
 		)
 
 		assert res.success, res
@@ -450,7 +457,7 @@ class fishery_market_environment(MultiAgentEnv):
 
 		sold_resources = np.sum(allocation, 1)
 		assert sold_resources.shape == (self.n_resources,)
-		assert np.allclose(sold_resources, cumulative_harvest, rtol=0, atol=0.05), 'cumulative_harvest = ' + str(cumulative_harvest) + '\n sold_resources = ' + str(sold_resources)
+		assert np.allclose(sold_resources, cumulative_harvest, rtol=0, atol=0.05), 'cumulative_harvest = ' + str(cumulative_harvest) + '\n sold_resources = ' + str(sold_resources) # FIXME: Enable
 
 		sold_resources = np.copy(cumulative_harvest) # At market equilibrium, we sell the entire harvest
 
@@ -474,7 +481,7 @@ class fishery_market_environment(MultiAgentEnv):
 
 		allocation = np.transpose(allocation)
 		used_budget = np.sum(allocation * prices, 1)
-		assert np.allclose(used_budget, budgets, rtol=0, atol=0.05), 'budgets = ' + str(budgets) + '\n used_budget = ' + str(used_budget)  # At market equilibrium, the budget is exhausted
+		assert np.allclose(used_budget, budgets, rtol=0, atol=0.05), 'budgets = ' + str(budgets) + '\n used_budget = ' + str(used_budget)  # At market equilibrium, the budget is exhausted # FIXME: Enable
 
 
 		# leftover_budget = np.sum(cumulative_harvest * prices, 0) - np.sum(budgets)
@@ -611,51 +618,68 @@ class fishery_market_environment(MultiAgentEnv):
 		cumulative_harvest = np.sum(harvests, axis=0)
 		assert cumulative_harvest.shape == (self.n_resources,)
 
-		counter = 20
+		tolerance = 1e-3
+		counter = 4
 		while True:
 			try:
 				if not self.compute_market_eq:
 					sold_resources, buyers_utility = self.optimal_allocation_given_prices_fn(prices, cumulative_harvest, budgets, valuations)
 				else:
-					sold_resources, buyers_utility, prices = self.fisher_market_equilibrium_calculator_fn(cumulative_harvest, budgets, valuations)
+					sold_resources, buyers_utility, prices = self.fisher_market_equilibrium_calculator_fn(cumulative_harvest, budgets, valuations, tolerance)
 			except ValueError as err:
 				# Sometimes we might get a negative value in the log
-				print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ValueError! " + str(counter) + " <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
-				print('cumulative_harvest = ')
-				print(cumulative_harvest)
-				print('budgets = ')
-				print(budgets)
-				print('valuations = ')
-				print(valuations)
-				if not self.compute_market_eq:
-					print('prices = ')
-					print(prices)
-				print()
-				print(err)
 				counter = counter - 1
 				if counter == 0:
-					raise err
+					print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ValueError! " + str(counter) + " <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+					print("WARNING: Failed to compute the market equilibrium!")
+					print('cumulative_harvest = ')
+					print(cumulative_harvest)
+					print('budgets = ')
+					print(budgets)
+					print('valuations = ')
+					print(valuations)
+					if not self.compute_market_eq:
+						print('prices = ')
+						print(prices)
+					print()
+					print(err)
+					
+					# if np.sum(cumulative_harvest) < 0.05:
+					sold_resources, buyers_utility, prices = cumulative_harvest, np.zeros(self.n_buyers), np.zeros(self.n_resources)
+					break
+					# raise err
+				tolerance = 1e-21
 				continue
 			except AssertionError as err:
 				# Sometimes -- due to the randomness of the optimization method and the tolerances -- we might not have a good enough solution
-				print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> AssertionError! " + str(counter) + " <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
-				print('cumulative_harvest = ')
-				print(cumulative_harvest)
-				print('budgets = ')
-				print(budgets)
-				print('valuations = ')
-				print(valuations)
-				if not self.compute_market_eq:
-					print('prices = ')
-					print(prices)
-				print()
-				print(err)
 				counter = counter - 1
 				if counter == 0:
-					raise err
+					print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> AssertionError! " + str(counter) + " <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+					print("WARNING: Failed to compute the market equilibrium!")
+					print('cumulative_harvest = ')
+					print(cumulative_harvest)
+					print('budgets = ')
+					print(budgets)
+					print('valuations = ')
+					print(valuations)
+					if not self.compute_market_eq:
+						print('prices = ')
+						print(prices)
+					print()
+					print(err)
+					
+					# if np.sum(cumulative_harvest) < 0.05:
+					sold_resources, buyers_utility, prices = cumulative_harvest, np.zeros(self.n_buyers), np.zeros(self.n_resources)
+					break
+					# raise err
+				tolerance = 1e-21
 				continue
 			else:
 				break
+
+
+		assert np.count_nonzero(sold_resources < 0) == 0, (sold_resources, buyers_utility, prices)
+		assert np.count_nonzero(prices < 0) == 0, (sold_resources, buyers_utility, prices)
 
 		# Calculate the revenue from sales
 		harvest_relative = np.copy(harvests).astype(np.float64)
@@ -880,7 +904,11 @@ class fishery_market_environment(MultiAgentEnv):
 
 		prices = np.copy(actions[self.l_policymakers[0]])
 
+		# Sanity check
 		assert prices.shape == (self.n_resources,)
+		if np.count_nonzero(prices < 0) != 0:
+			raise ValueError('We can not have negative prices: ' + str(prices))
+
 
 		self.history['prices'] = np.copy(prices)	# Store prices to calculate rewards in the harvest step
 
@@ -912,7 +940,7 @@ class fishery_market_environment(MultiAgentEnv):
 		for i, harvester in enumerate(self.l_harvesters):
 			states[harvester] = np.concatenate([prices, self.history['efforts'][harvester], [harvester_rewards[i]]])
 			rewards[harvester] = harvester_rewards[i]
-			infos[harvester] = { "harvester_rewards": harvester_rewards, "harvester_revenue": harvester_revenue, "wasted_percentage": wasted_percentage, "buyers_utility": buyers_utility}
+			infos[harvester] = { "harvester_rewards": harvester_rewards, "harvester_revenue": harvester_revenue, "wasted_percentage": wasted_percentage, "buyers_utility": buyers_utility, "prices": prices}
 		
 
 		dones['__all__'] = False

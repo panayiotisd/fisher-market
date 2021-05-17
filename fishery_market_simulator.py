@@ -402,6 +402,14 @@ parser.add_argument('--n_resources', default=4, type=int)
 parser.add_argument('--Ms', default=0.8, type=float)
 parser.add_argument('--compute_market_eq', default=False, type=str2bool)
 
+parser.add_argument('--harvester_wastefulness_cost', default=0.0, type=float)
+parser.add_argument('--policymaker_harvesters_welfare_weight', default=1.0, type=float)
+parser.add_argument('--policymaker_buyers_welfare_weight', default=1.0, type=float)
+parser.add_argument('--policymaker_fairness_weight', default=1.0, type=float)
+parser.add_argument('--policymaker_wastefulness_weight', default=0.0, type=float)
+parser.add_argument('--policymaker_sustainability_weight', default=1.0, type=float)
+parser.add_argument('--fairness_metric', default='jain', type=str, choices={'jain', 'gini'})
+
 # Training arguments
 parser.add_argument('--n_episodes', default=3000, type=int)
 parser.add_argument('--max_steps', default=500, type=int)
@@ -411,6 +419,7 @@ parser.add_argument('--num_workers', default=1, type=int)
 parser.add_argument('--num_cpus_per_worker', default=1, type=int)
 
 # Miscellaneous
+parser.add_argument('--random_seed', default=42, type=int)
 parser.add_argument('--debug', default=False, type=str2bool)
 
 
@@ -424,12 +433,21 @@ print("n_resources = " + str(args.n_resources))
 print("Ms = " + str(args.Ms))
 print("compute_market_eq = " + str(args.compute_market_eq))
 
+print("harvester_wastefulness_cost = " + str(args.harvester_wastefulness_cost))
+print("policymaker_harvesters_welfare_weight = " + str(args.policymaker_harvesters_welfare_weight))
+print("policymaker_buyers_welfare_weight = " + str(args.policymaker_buyers_welfare_weight))
+print("policymaker_fairness_weight = " + str(args.policymaker_fairness_weight))
+print("policymaker_wastefulness_weight = " + str(args.policymaker_wastefulness_weight))
+print("policymaker_sustainability_weight = " + str(args.policymaker_sustainability_weight))
+print("fairness_metric = " + str(args.fairness_metric))
+
 print("n_episodes = " + str(args.n_episodes))
 print("max_steps = " + str(args.max_steps))
 
 print("num_workers = " + str(args.num_workers))
 print("num_cpus_per_worker = " + str(args.num_cpus_per_worker))
 
+print("random_seed = " + str(args.random_seed))
 print("debug = " + str(args.debug))
 print("-----------------------------------------")
 
@@ -448,16 +466,16 @@ Ms = args.Ms  #  default: 0.8
 S_eq = np.array([Ms * LSH * n_harvesters] * n_resources)
 
 threshold = 1e-4
-harvester_wastefulness_cost = 1.0
-policymaker_harvesters_welfare_weight = 1.0
-policymaker_buyers_welfare_weight = 1.0
-policymaker_fairness_weight = 1.0
-policymaker_wastefulness_weight = 0		# FIXME: 0?
-policymaker_sustainability_weight = 1.0
-fairness_metric = 'jain'
+harvester_wastefulness_cost = args.harvester_wastefulness_cost  # default: 0.0
+policymaker_harvesters_welfare_weight = args.policymaker_harvesters_welfare_weight  # default: 1.0
+policymaker_buyers_welfare_weight = args.policymaker_buyers_welfare_weight  # default: 1.0
+policymaker_fairness_weight = args.policymaker_fairness_weight  # default: 1.0
+policymaker_wastefulness_weight = args.policymaker_wastefulness_weight  # default: 0.0
+policymaker_sustainability_weight = args.policymaker_sustainability_weight  # default: 1.0
+fairness_metric = args.fairness_metric  # default: 'jain'
 
 compute_market_eq = args.compute_market_eq  #  default: False
-random_seed = 42
+random_seed = args.random_seed # default: 42
 debug = args.debug  # default: False
 
 

@@ -25,11 +25,11 @@ class fishery_market_environment(MultiAgentEnv):
 				 S_eq,
 				 max_steps,
 				 threshold=1e-4,
-				 harvester_wastefulness_cost=1.0,
+				 harvester_wastefulness_cost=0.0,
 				 policymaker_harvesters_welfare_weight=1.0,
 				 policymaker_buyers_welfare_weight=1.0,
 				 policymaker_fairness_weight=1.0,
-				 policymaker_wastefulness_weight=0,		# FIXME: 0?
+				 policymaker_wastefulness_weight=0.0,
 				 policymaker_sustainability_weight=1.0,
 				 fairness_metric='jain',
 				 random_seed=42,

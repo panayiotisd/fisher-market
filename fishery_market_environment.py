@@ -393,10 +393,15 @@ class fishery_market_environment(MultiAgentEnv):
 		if np.array_equal(cumulative_harvest, np.zeros(self.n_resources)):
 			return np.zeros(self.n_resources), np.zeros(self.n_buyers), np.zeros(self.n_resources)
 
-		if np.allclose(cumulative_harvest, np.zeros(self.n_resources), rtol=0, atol=9e-3):
+		if np.allclose(cumulative_harvest, np.zeros(self.n_resources), rtol=0, atol=1e-3):
 			return cumulative_harvest, np.zeros(self.n_buyers), np.zeros(self.n_resources)
 
 		cumulative_harvest[cumulative_harvest <=0 ] = 1e-6	# Ensure there are no zeros
+
+		scaling_factor = 1.0
+		if np.sum(cumulative_harvest) <=1:
+			scaling_factor = 100.0	# The market solution is the same up to scaling, and scaling makes it easier for the solver
+			cumulative_harvest = scaling_factor * cumulative_harvest
 
 		# Volume constraints:
 		# The total amount of a resource that all buyers cumulative buy can not exceed the total harvest of that resource.
@@ -450,9 +455,10 @@ class fishery_market_environment(MultiAgentEnv):
 
 		assert res.success, res
 
+		cumulative_harvest = cumulative_harvest / scaling_factor
 
-		allocation = np.copy(res.x)
-		allocation = np.around(allocation, 3)
+		allocation = np.copy(res.x) / scaling_factor
+		allocation = np.around(allocation, 6)
 		allocation = allocation.reshape(self.n_resources, self.n_buyers)
 
 		sold_resources = np.sum(allocation, 1)
@@ -463,8 +469,8 @@ class fishery_market_environment(MultiAgentEnv):
 
 
 
-		buyers_utility = res.x * np.transpose(valuations).flatten()
-		buyers_utility = np.around(buyers_utility, 3)
+		buyers_utility = (res.x / scaling_factor) * np.transpose(valuations).flatten()
+		buyers_utility = np.around(buyers_utility, 6)
 		buyers_utility = buyers_utility.reshape(self.n_resources, self.n_buyers)
 		buyers_utility = np.transpose(buyers_utility)
 		buyers_utility = np.sum(buyers_utility, 1)
@@ -478,6 +484,9 @@ class fishery_market_environment(MultiAgentEnv):
 		for r in range(self.n_resources):
 			prices.append(res.v[r][0])
 		prices = np.array(prices)
+		prices = scaling_factor * prices
+		prices[abs(prices) < 1e-6] = 0	# Remove negative prices due to noise
+		assert np.count_nonzero(prices < 0) == 0, prices
 
 		allocation = np.transpose(allocation)
 		used_budget = np.sum(allocation * prices, 1)
@@ -632,15 +641,11 @@ class fishery_market_environment(MultiAgentEnv):
 				if counter == 0:
 					print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ValueError! " + str(counter) + " <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 					print("WARNING: Failed to compute the market equilibrium!")
-					print('cumulative_harvest = ')
-					print(cumulative_harvest)
-					print('budgets = ')
-					print(budgets)
-					print('valuations = ')
-					print(valuations)
+					print('cumulative_harvest = np.' + repr(cumulative_harvest))
+					print('budgets = np.' + repr(budgets))
+					print('valuations = np.' + repr(valuations))
 					if not self.compute_market_eq:
-						print('prices = ')
-						print(prices)
+						print('prices = np.' + repr(prices))
 					print()
 					print(err)
 					
@@ -656,15 +661,11 @@ class fishery_market_environment(MultiAgentEnv):
 				if counter == 0:
 					print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> AssertionError! " + str(counter) + " <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 					print("WARNING: Failed to compute the market equilibrium!")
-					print('cumulative_harvest = ')
-					print(cumulative_harvest)
-					print('budgets = ')
-					print(budgets)
-					print('valuations = ')
-					print(valuations)
+					print('cumulative_harvest = np.' + repr(cumulative_harvest))
+					print('budgets = np.' + repr(budgets))
+					print('valuations = np.' + repr(valuations))
 					if not self.compute_market_eq:
-						print('prices = ')
-						print(prices)
+						print('prices = np.' + repr(prices))
 					print()
 					print(err)
 					
@@ -678,8 +679,8 @@ class fishery_market_environment(MultiAgentEnv):
 				break
 
 
-		assert np.count_nonzero(sold_resources < 0) == 0, (sold_resources, buyers_utility, prices)
-		assert np.count_nonzero(prices < 0) == 0, (sold_resources, buyers_utility, prices)
+		assert np.count_nonzero(sold_resources < 0) == 0, ('sold_resources = np.' + repr(sold_resources), 'buyers_utility = np.' + repr(buyers_utility), 'prices = np.' + repr(prices), 'cumulative_harvest = np.' + repr(cumulative_harvest), 'budgets = np.' + repr(budgets), 'valuations = np.' + repr(valuations))
+		assert np.count_nonzero(prices < 0) == 0, ('sold_resources = np.' + repr(sold_resources), 'buyers_utility = np.' + repr(buyers_utility), 'prices = np.' + repr(prices), 'cumulative_harvest = np.' + repr(cumulative_harvest), 'budgets = np.' + repr(budgets), 'valuations = np.' + repr(valuations))
 
 		# Calculate the revenue from sales
 		harvest_relative = np.copy(harvests).astype(np.float64)

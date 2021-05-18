@@ -498,8 +498,8 @@ nw_model = {"fcnet_hiddens": [hidden_layer_size, hidden_layer_size],}
 
 log_dir='./logs' # directory to save episode logs
 checkpoint_dir = './checkpoints'
-epdata_save_freq = 500
-checkpoint_interval = 500
+epdata_save_freq = 250
+checkpoint_interval = 250
 
 
 # ******** Conditions to cut training ********

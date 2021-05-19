@@ -67,8 +67,8 @@ class fishery_market_environment(MultiAgentEnv):
 			Weight of the wastefulness objective in policymaker's reward function.
 		policymaker_sustainability_weight : float
 			Weight of the sustainability objective in policymaker's reward function.
-		fairness_metric : 'jain' or 'gini'
-			Use the Jain index or the Gini coefficient to calculate fairness
+		fairness_metric : 'jain', 'gini', 'atkinson'
+			Use the Jain index, the Gini coefficient, or the Atkinson index to calculate fairness
 		random_seed : int
 			Random number generator seed
 		compute_market_eq : boolean
@@ -152,8 +152,8 @@ class fishery_market_environment(MultiAgentEnv):
 			raise ValueError("policymaker_wastefulness_weight must be non-negative: " + str(self.policymaker_wastefulness_weight))
 		if(not (0 <= self.policymaker_sustainability_weight)):
 			raise ValueError("policymaker_sustainability_weight must be non-negative: " + str(self.policymaker_sustainability_weight))
-		if(not (fairness_metric == 'jain' or fairness_metric == 'gini')):
-			raise ValueError("Select amongst the 'jain' or 'gini' fairness metrics: " + str(self.fairness_metric))
+		if(not (fairness_metric == 'jain' or fairness_metric == 'gini' or fairness_metric == 'atkinson')):
+			raise ValueError("Select amongst the 'jain', 'gini', or 'atkinson' fairness metrics: " + str(self.fairness_metric))
 		if(not (isinstance(self.random_seed, int) or isinstance(self.random_seed, float))):
 			raise ValueError("The seed must be a number: " + str(self.random_seed))
 		if(not isinstance(self.compute_market_eq, bool)):
@@ -570,9 +570,19 @@ class fishery_market_environment(MultiAgentEnv):
 
 	def fairness_fn(self, harvester_rewards):
 		if (self.fairness_metric == 'jain'):
-			return self.jain_index_fn(harvester_rewards)
+			fairness = self.jain_index_fn(harvester_rewards)
+			assert 0 <= fairness <= 1
+			return fairness
 		elif (self.fairness_metric == 'gini'):
-			return 1 - self.gini_coefficient_fn(harvester_rewards) # We maximize fairness. In Gini coefficient an allocation is fair iff the coefficient is 0.
+			fairness =  1 - self.gini_coefficient_fn(harvester_rewards) # We maximize fairness. According to the Gini coefficient, an allocation is fair iff the coefficient is 0.
+			if fairness < 0:		# The Gini coefficient is not bounded
+				fairness = 0
+			assert 0 <= fairness <= 1
+			return fairness
+		elif (self.fairness_metric == 'atkinson'):
+			fairness = 1 - self.atkinson_index_fn(harvester_rewards) # We maximize fairness. According to the Atkinson index, an allocation is fair iff the index is 0.
+			assert 0 <= fairness <= 1
+			return fairness
 		else:
 			raise ValueError('Invalid fairness metric: ' + self.fairness_metric)
 
@@ -595,6 +605,19 @@ class fishery_market_environment(MultiAgentEnv):
 		G = np.sum(np.abs(rewards - np.array([np.roll(rewards,i) for i in range(rewards.shape[0])])))
 		G /= sum(rewards) * 2 * rewards.shape[0]
 		return G
+
+
+	# This is the Atkinson index for epsilon = 1
+	@staticmethod
+	def atkinson_index_fn(rewards):
+		# if np.count_nonzero(rewards) == 0:
+		if np.allclose(rewards, np.zeros(rewards.shape[0]), rtol=0, atol=1e-6):
+			return 0 # Fair allocation; everybody got reward 0
+		rewards = rewards.astype(np.float64)
+		product = np.prod(rewards)
+		assert product > 0, rewards # Ensure there are no precision errors
+
+		return 1 - ( pow(product, 1.0 / rewards.shape[0]) / np.mean(rewards) )
 
 
 	def wastefulness_fn(self, wasted_percentage):

@@ -348,11 +348,21 @@ class MyCallbacks(DefaultCallbacks):
 
     def fairness_fn(self, harvester_rewards):
         if (fairness_metric == 'jain'):
-            return self.jain_index_fn(harvester_rewards)
+            fairness = self.jain_index_fn(harvester_rewards)
+            assert 0 <= fairness <= 1
+            return fairness
         elif (fairness_metric == 'gini'):
-            return 1 - self.gini_coefficient_fn(harvester_rewards) # We maximize fairness. In Gini coefficient an allocation is fair iff the coefficient is 0.
+            fairness =  1 - self.gini_coefficient_fn(harvester_rewards) # We maximize fairness. According to the Gini coefficient, an allocation is fair iff the coefficient is 0.
+            if fairness < 0:     # The Gini coefficient is not bounded
+                fairness = 0
+            assert 0 <= fairness <= 1
+            return fairness
+        elif (fairness_metric == 'atkinson'):
+            fairness = 1 - self.atkinson_index_fn(harvester_rewards) # We maximize fairness. According to the Atkinson index, an allocation is fair iff the index is 0.
+            assert 0 <= fairness <= 1
+            return fairness
         else:
-            raise ValueError('Invalid fairness metric: ' + fairness_metric)
+            raise ValueError('Invalid fairness metric: ' + self.fairness_metric)
 
 
     @staticmethod
@@ -373,6 +383,19 @@ class MyCallbacks(DefaultCallbacks):
         G = np.sum(np.abs(rewards - np.array([np.roll(rewards,i) for i in range(rewards.shape[0])])))
         G /= sum(rewards) * 2 * rewards.shape[0]
         return G
+
+
+    # This is the Atkinson index for epsilon = 1
+    @staticmethod
+    def atkinson_index_fn(rewards):
+        # if np.count_nonzero(rewards) == 0:
+        if np.allclose(rewards, np.zeros(rewards.shape[0]), rtol=0, atol=1e-6):
+            return 0 # Fair allocation; everybody got reward 0
+        rewards = rewards.astype(np.float64)
+        product = np.prod(rewards)
+        assert product > 0 # Ensure there are no precision errors
+
+        return 1 - ( pow(product, 1.0 / rewards.shape[0]) / np.mean(rewards) )
 
 
 
@@ -408,7 +431,7 @@ parser.add_argument('--policymaker_buyers_welfare_weight', default=1.0, type=flo
 parser.add_argument('--policymaker_fairness_weight', default=1.0, type=float)
 parser.add_argument('--policymaker_wastefulness_weight', default=0.0, type=float)
 parser.add_argument('--policymaker_sustainability_weight', default=1.0, type=float)
-parser.add_argument('--fairness_metric', default='jain', type=str, choices={'jain', 'gini'})
+parser.add_argument('--fairness_metric', default='jain', type=str, choices={'jain', 'gini', 'atkinson'})
 
 # Training arguments
 parser.add_argument('--n_episodes', default=3000, type=int)

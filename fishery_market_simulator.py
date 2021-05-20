@@ -186,6 +186,8 @@ class MyCallbacks(DefaultCallbacks):
 
         episode.user_data["harvester_fairness"] = []
         episode.user_data["stock_difference"] = []
+        episode.user_data["harvests"] = []
+        episode.user_data["efforts"] = []
 
         episode.user_data["harvester_rewards"] = []
         episode.user_data["harvester_revenue"] = []
@@ -244,6 +246,8 @@ class MyCallbacks(DefaultCallbacks):
             if not (info_dict["harvester_fairness"] == -np.inf and info_dict["stock_difference"] == -np.inf): # Disregard the last two values
                 episode.user_data["harvester_fairness"].append(info_dict["harvester_fairness"])
                 episode.user_data["stock_difference"].append(info_dict["stock_difference"])
+                episode.user_data["harvests"].append(info_dict["harvests"])
+                episode.user_data["efforts"].append(info_dict["efforts"])
            
 
         self.harvesting_step = not self.harvesting_step
@@ -272,6 +276,8 @@ class MyCallbacks(DefaultCallbacks):
 
         harvester_fairness = episode.user_data["harvester_fairness"]
         stock_difference = episode.user_data["stock_difference"]
+        harvests = episode.user_data["harvests"]
+        efforts = episode.user_data["efforts"]
 
         harvester_rewards = episode.user_data["harvester_rewards"]
         harvester_revenue = episode.user_data["harvester_revenue"]
@@ -294,6 +300,8 @@ class MyCallbacks(DefaultCallbacks):
                       'harvester_fairness_at_end' : harvester_fairness_at_end,
                       'harvester_fairness': harvester_fairness,
                       'stock_difference': stock_difference,
+                      'harvests': harvests,
+                      'efforts': efforts,
                       'harvester_rewards': harvester_rewards,
                       'harvester_revenue': harvester_revenue,
                       'wasted_percentage': wasted_percentage,
@@ -436,7 +444,7 @@ parser.add_argument('--policymaker_sustainability_weight', default=1.0, type=flo
 parser.add_argument('--fairness_metric', default='jain', type=str, choices={'jain', 'gini', 'atkinson'})
 
 # Training arguments
-parser.add_argument('--n_episodes', default=3000, type=int)
+parser.add_argument('--n_episodes', default=2400, type=int)
 parser.add_argument('--max_steps', default=500, type=int)
 
 # Workers (parallelism)
@@ -445,6 +453,8 @@ parser.add_argument('--num_cpus_per_worker', default=1, type=int)
 
 # Miscellaneous
 parser.add_argument('--random_seed', default=42, type=int)
+parser.add_argument('--log_dir', default='./logs', type=str)
+parser.add_argument('--checkpoint_dir', default='./checkpoints', type=str)
 parser.add_argument('--debug', default=False, type=str2bool)
 
 
@@ -473,6 +483,8 @@ print("num_workers = " + str(args.num_workers))
 print("num_cpus_per_worker = " + str(args.num_cpus_per_worker))
 
 print("random_seed = " + str(args.random_seed))
+print("log_dir = " + str(args.log_dir))
+print("checkpoint_dir = " + str(args.checkpoint_dir))
 print("debug = " + str(args.debug))
 print("-----------------------------------------")
 
@@ -505,7 +517,7 @@ debug = args.debug  # default: False
 
 
 # ******** Training Parameters ********
-n_episodes = args.n_episodes  # default: 3000
+n_episodes = args.n_episodes  # default: 2400
 max_steps = args.max_steps  # default: 500
 
 train_algo = "PPO"
@@ -521,10 +533,10 @@ num_gpus_per_worker = 0
 hidden_layer_size = 64
 nw_model = {"fcnet_hiddens": [hidden_layer_size, hidden_layer_size],}  
 
-log_dir='./logs' # directory to save episode logs
-checkpoint_dir = './checkpoints'
-epdata_save_freq = 250
-checkpoint_interval = 250
+log_dir = args.log_dir   # default: './logs', directory to save episode logs
+checkpoint_dir = args.checkpoint_dir   # default: './checkpoints'
+epdata_save_freq = math.ceil(args.n_episodes / 5.0)
+checkpoint_interval = math.ceil(args.n_episodes / 5.0)
 
 
 # ******** Conditions to cut training ********

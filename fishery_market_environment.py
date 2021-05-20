@@ -884,7 +884,7 @@ class fishery_market_environment(MultiAgentEnv):
 		policymaker = self.l_policymakers[0]
 		states[policymaker] = np.concatenate([cumulative_harvest, self.cur_stock, self.budgets, self.valuations.flatten()])
 		rewards[policymaker] = policymaker_reward	# Policymaker 's reward for the previous step. Implemented like this because of RLLib's technical constraint which requires observation and reward dicts to have the same keys
-		infos[policymaker] = {"harvester_fairness" : harvester_fairness, "stock_difference" : stock_difference}
+		infos[policymaker] = {"harvester_fairness" : harvester_fairness, "stock_difference" : stock_difference, "harvests" : harvests, "efforts" : efforts}
 		dones['__all__'] = False
 
 

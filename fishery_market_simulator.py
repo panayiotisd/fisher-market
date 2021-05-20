@@ -393,7 +393,9 @@ class MyCallbacks(DefaultCallbacks):
             return 0 # Fair allocation; everybody got reward 0
         rewards = rewards.astype(np.float64)
         product = np.prod(rewards)
-        assert product > 0 # Ensure there are no precision errors
+
+        if not np.any(rewards == 0):
+            assert product > 0 # Ensure there are no precision errors
 
         return 1 - ( pow(product, 1.0 / rewards.shape[0]) / np.mean(rewards) )
 

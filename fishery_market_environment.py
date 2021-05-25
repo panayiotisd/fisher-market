@@ -327,6 +327,7 @@ class fishery_market_environment(MultiAgentEnv):
 		noise = np.random.uniform(-self.valuations_noise, self.valuations_noise, [self.n_buyers, self.n_resources])
 		valuations = valuations + noise
 		valuations[valuations <= 0] = 1e-6
+		valuations[valuations >= 1] = 1 - 1e-6
 		return valuations
 
 

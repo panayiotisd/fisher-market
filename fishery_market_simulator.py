@@ -68,6 +68,9 @@ def generate_env_fn(env_context=None):
                                       policymaker_wastefulness_weight = policymaker_wastefulness_weight,
                                       policymaker_sustainability_weight = policymaker_sustainability_weight,
                                       fairness_metric = fairness_metric,
+                                      valuations_noise_method = valuations_noise_method,
+                                      valuations_noise = valuations_noise,
+                                      n_valuations_bins = n_valuations_bins,
                                       random_seed = random_seed,
                                       compute_market_eq = compute_market_eq,
                                       debug = debug)
@@ -108,6 +111,9 @@ class MyCallbacks(DefaultCallbacks):
             'policymaker_wastefulness_weight' : policymaker_wastefulness_weight,
             'policymaker_sustainability_weight' : policymaker_sustainability_weight,
             'fairness_metric' : fairness_metric,
+            'valuations_noise_method' : valuations_noise_method,
+            'valuations_noise' : valuations_noise,
+            'n_valuations_bins' : n_valuations_bins,
             'random_seed' : random_seed,
             'compute_market_eq' : compute_market_eq,
             'num_workers' : num_workers,
@@ -147,6 +153,9 @@ class MyCallbacks(DefaultCallbacks):
             'policymaker_wastefulness_weight' : policymaker_wastefulness_weight,
             'policymaker_sustainability_weight' : policymaker_sustainability_weight,
             'fairness_metric' : fairness_metric,
+            'valuations_noise_method' : valuations_noise_method,
+            'valuations_noise' : valuations_noise,
+            'n_valuations_bins' : n_valuations_bins,
             'random_seed' : random_seed,
             'compute_market_eq' : compute_market_eq,
             'num_workers' : num_workers,
@@ -443,6 +452,10 @@ parser.add_argument('--policymaker_wastefulness_weight', default=0.0, type=float
 parser.add_argument('--policymaker_sustainability_weight', default=1.0, type=float)
 parser.add_argument('--fairness_metric', default='jain', type=str, choices={'jain', 'gini', 'atkinson'})
 
+parser.add_argument('--valuations_noise_method', default=None, type=str, choices={'uniform', 'bins'})
+parser.add_argument('--valuations_noise', default=0.01, type=float)
+parser.add_argument('--n_valuations_bins', default=100, type=int)
+
 # Training arguments
 parser.add_argument('--n_episodes', default=2400, type=int)
 parser.add_argument('--max_steps', default=500, type=int)
@@ -475,6 +488,10 @@ print("policymaker_fairness_weight = " + str(args.policymaker_fairness_weight))
 print("policymaker_wastefulness_weight = " + str(args.policymaker_wastefulness_weight))
 print("policymaker_sustainability_weight = " + str(args.policymaker_sustainability_weight))
 print("fairness_metric = " + str(args.fairness_metric))
+
+print("valuations_noise_method = " + str(args.valuations_noise_method))
+print("valuations_noise = " + str(args.valuations_noise))
+print("n_valuations_bins = " + str(args.n_valuations_bins))
 
 print("n_episodes = " + str(args.n_episodes))
 print("max_steps = " + str(args.max_steps))
@@ -510,6 +527,10 @@ policymaker_fairness_weight = args.policymaker_fairness_weight  # default: 1.0
 policymaker_wastefulness_weight = args.policymaker_wastefulness_weight  # default: 0.0
 policymaker_sustainability_weight = args.policymaker_sustainability_weight  # default: 1.0
 fairness_metric = args.fairness_metric  # default: 'jain'
+
+valuations_noise_method = args.valuations_noise_method  # default: None
+valuations_noise = args.valuations_noise  # default: 0.01
+n_valuations_bins = args.n_valuations_bins  # default: 100
 
 compute_market_eq = args.compute_market_eq  #  default: False
 random_seed = args.random_seed # default: 42

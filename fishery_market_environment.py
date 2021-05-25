@@ -32,6 +32,9 @@ class fishery_market_environment(MultiAgentEnv):
 				 policymaker_wastefulness_weight=0.0,
 				 policymaker_sustainability_weight=1.0,
 				 fairness_metric='jain',
+				 valuations_noise_method=None,
+				 valuations_noise=0.01,
+				 n_valuations_bins=100,
 				 random_seed=42,
 				 compute_market_eq=False,
 				 debug=False,
@@ -69,6 +72,12 @@ class fishery_market_environment(MultiAgentEnv):
 			Weight of the sustainability objective in policymaker's reward function.
 		fairness_metric : 'jain', 'gini', 'atkinson'
 			Use the Jain index, the Gini coefficient, or the Atkinson index to calculate fairness
+		valuations_noise_method: None, 'uniform', 'bins'
+			The policymaker receives as input the original valuations vector, or a noisy one with uniform noise, or one split into bins
+		valuations_noise: float
+			If valuations_noise_method == 'uniform', then this defines the amount of noise
+		n_valuations_bins: int
+			If valuations_noise_method == 'bins', then this defines the number of bins
 		random_seed : int
 			Random number generator seed
 		compute_market_eq : boolean
@@ -94,6 +103,9 @@ class fishery_market_environment(MultiAgentEnv):
 		self.policymaker_wastefulness_weight = policymaker_wastefulness_weight
 		self.policymaker_sustainability_weight = policymaker_sustainability_weight
 		self.fairness_metric = fairness_metric
+		self.valuations_noise_method = valuations_noise_method
+		self.valuations_noise = valuations_noise
+		self.n_valuations_bins = n_valuations_bins
 		self.random_seed = random_seed
 		self.compute_market_eq = compute_market_eq
 		self.debug = debug
@@ -117,11 +129,11 @@ class fishery_market_environment(MultiAgentEnv):
 
 
 		# check validity of parameters
-		if(not (isinstance(self.n_harvesters, int) and self.n_harvesters >= 2)):
+		if (not (isinstance(self.n_harvesters, int) and self.n_harvesters >= 2)):
 			raise ValueError("There must be at least two harvesters: " + str(self.n_harvesters))
-		if(not (isinstance(self.n_buyers, int) and self.n_buyers >= 2)):
+		if (not (isinstance(self.n_buyers, int) and self.n_buyers >= 2)):
 			raise ValueError("There must be at least two buyers: " + str(self.n_buyers))
-		if(not (isinstance(self.n_resources, int) and self.n_resources >= 2)):
+		if (not (isinstance(self.n_resources, int) and self.n_resources >= 2)):
 			raise ValueError("There must be at least two resources: " + str(self.n_resources))
 		if not (self.skill_level.shape == (self.n_harvesters, self.n_resources) and
 				self.skill_level.dtype == (np.float64 or np.float32 or np.int) and
@@ -136,29 +148,36 @@ class fishery_market_environment(MultiAgentEnv):
 				self.S_eq.dtype == (np.float64 or np.float32 or np.int) and
 				np.count_nonzero(self.S_eq <= 0) == 0):
 			raise ValueError("Seq have to be a (" + str(self.n_resources) + ",) floats/int np array in (0, inf]: " + np.array2string(self.S_eq))
-		if(not (isinstance(self.max_steps, int) and self.max_steps >= 1)):
+		if (not (isinstance(self.max_steps, int) and self.max_steps >= 1)):
 			raise ValueError("max_steps must be >= 1: " + str(self.max_steps))
-		if(not (0 < self.threshold < 1)):
+		if (not (0 < self.threshold < 1)):
 			raise ValueError("threshold must be in (0, 1): " + str(self.threshold))
-		if(not (0 <= self.harvester_wastefulness_cost)):
+		if (not (0 <= self.harvester_wastefulness_cost)):
 			raise ValueError("harvester_wastefulness_cost must be non-negative: " + str(self.harvester_wastefulness_cost))
-		if(not (0 <= self.policymaker_harvesters_welfare_weight)):
+		if (not (0 <= self.policymaker_harvesters_welfare_weight)):
 			raise ValueError("policymaker_harvesters_welfare_weight must be non-negative: " + str(self.policymaker_harvesters_welfare_weight))
-		if(not (0 <= self.policymaker_buyers_welfare_weight)):
+		if (not (0 <= self.policymaker_buyers_welfare_weight)):
 			raise ValueError("policymaker_buyers_welfare_weight must be non-negative: " + str(self.policymaker_buyers_welfare_weight))
-		if(not (0 <= self.policymaker_fairness_weight)):
+		if (not (0 <= self.policymaker_fairness_weight)):
 			raise ValueError("policymaker_fairness_weight must be non-negative: " + str(self.policymaker_fairness_weight))
-		if(not (0 <= self.policymaker_wastefulness_weight)):
+		if (not (0 <= self.policymaker_wastefulness_weight)):
 			raise ValueError("policymaker_wastefulness_weight must be non-negative: " + str(self.policymaker_wastefulness_weight))
-		if(not (0 <= self.policymaker_sustainability_weight)):
+		if (not (0 <= self.policymaker_sustainability_weight)):
 			raise ValueError("policymaker_sustainability_weight must be non-negative: " + str(self.policymaker_sustainability_weight))
-		if(not (fairness_metric == 'jain' or fairness_metric == 'gini' or fairness_metric == 'atkinson')):
+		if (not (self.fairness_metric == 'jain' or self.fairness_metric == 'gini' or self.fairness_metric == 'atkinson')):
 			raise ValueError("Select amongst the 'jain', 'gini', or 'atkinson' fairness metrics: " + str(self.fairness_metric))
-		if(not (isinstance(self.random_seed, int) or isinstance(self.random_seed, float))):
+		if self.valuations_noise_method:
+			if (not (self.valuations_noise_method == 'uniform' or self.valuations_noise_method == 'bins')):
+				raise ValueError("Select amongst the 'uniform' or 'bins' valuations noise method: " + str(self.valuations_noise_method))
+		if (not (isinstance(self.valuations_noise, float) and valuations_noise < 1.0 and valuations_noise > 0)):
+			raise ValueError("The valuations noise has to be a float in (0, 1): " + str(self.valuations_noise))
+		if (not (isinstance(self.n_valuations_bins, int) and self.n_valuations_bins >= 2)):
+			raise ValueError("The number of bins has to be an integer and there must be at least two bins: " + str(self.n_valuations_bins))
+		if (not (isinstance(self.random_seed, int) or isinstance(self.random_seed, float))):
 			raise ValueError("The seed must be a number: " + str(self.random_seed))
-		if(not isinstance(self.compute_market_eq, bool)):
+		if (not isinstance(self.compute_market_eq, bool)):
 			raise ValueError("The compute_market_eq flag must be boolean: " + str(self.compute_market_eq))
-		if(not isinstance(self.debug, bool)):
+		if (not isinstance(self.debug, bool)):
 			raise ValueError("The debug flag must be boolean: " + str(self.debug))
 
 
@@ -211,6 +230,9 @@ class fishery_market_environment(MultiAgentEnv):
 		print('policymaker_wastefulness_weight = ' + str(self.policymaker_wastefulness_weight))
 		print('policymaker_sustainability_weight = ' + str(self.policymaker_sustainability_weight))
 		print('fairness_metric = ' + str(self.fairness_metric))
+		print('valuations_noise_method = ' + str(self.valuations_noise_method))
+		print('valuations_noise = ' + str(self.valuations_noise))
+		print('n_valuations_bins = ' + str(self.n_valuations_bins))
 		print('random_seed = ' + str(self.random_seed))
 		print('compute_market_eq = ' + str(self.compute_market_eq))
 		print()
@@ -271,17 +293,54 @@ class fishery_market_environment(MultiAgentEnv):
 
 
 	def bugdet_fn(self):
-		np.random.seed(rnd.randint(0, 9999))
+		np.random.seed(rnd.randint(0, 9999)) # FIXME: Replace with below
+		if self.valuations_noise_method:
+			np.random.seed(self.cur_step)
 		res = np.random.rand(self.n_buyers)
 		res[res <= 0] = 1e-6	# Ensure there are no zeros
 		return res
 
 
 	def valuations_fn(self):
-		np.random.seed(rnd.randint(0, 9999))
+		np.random.seed(rnd.randint(0, 9999)) # FIXME: Replace with below
+		if self.valuations_noise_method:
+			np.random.seed(self.cur_step)
 		res = np.random.rand(self.n_buyers, self.n_resources)
 		res[res <= 0] = 1e-6	# Ensure there are no zeros
 		return res
+
+		
+	def add_noise_fn(self, valuations):
+		if (self.valuations_noise_method == 'uniform'):
+			valuations = self.uniform_noise_fn(valuations)
+			assert np.count_nonzero(self.valuations <= 0) == 0 and np.count_nonzero(self.valuations > 1) == 0, valuations
+			return valuations
+		elif (self.valuations_noise_method == 'bins'):
+			valuations = self.split_into_bins_fn(valuations)
+			assert np.count_nonzero(self.valuations <= 0) == 0 and np.count_nonzero(self.valuations > 1) == 0, valuations
+			return valuations
+		else:
+			raise ValueError('Invalid valuations noise method: ' + self.valuations_noise_method)
+
+
+	def uniform_noise_fn(self, valuations):
+		noise = np.random.uniform(-self.valuations_noise, self.valuations_noise, [self.n_buyers, self.n_resources])
+		valuations = valuations + noise
+		valuations[valuations <= 0] = 1e-6
+		return valuations
+
+
+	def split_into_bins_fn(self, valuations):
+		bins = np.linspace(0, 1, self.n_valuations_bins + 1, endpoint=True, dtype=np.float64)
+		bins = np.around(bins, 3)
+
+		valuations_bins = np.digitize(valuations, bins, right=True)
+
+		for buyer in range(self.n_buyers):
+			for resource in range(self.n_resources):
+				valuations[buyer, resource] = (bins[valuations_bins[buyer, resource] - 1] + bins[valuations_bins[buyer, resource]]) / 2.0
+
+		return valuations
 
 
 	def optimal_allocation_given_prices_fn(self, prices, cumulative_harvest, budgets, valuations):
@@ -883,6 +942,8 @@ class fishery_market_environment(MultiAgentEnv):
 		# Set policymaker observations
 		policymaker = self.l_policymakers[0]
 		states[policymaker] = np.concatenate([cumulative_harvest, self.cur_stock, self.budgets, self.valuations.flatten()])
+		if self.valuations_noise_method:
+			states[policymaker] = np.concatenate([cumulative_harvest, self.cur_stock, self.budgets, self.add_noise_fn(self.valuations).flatten()])
 		rewards[policymaker] = policymaker_reward	# Policymaker 's reward for the previous step. Implemented like this because of RLLib's technical constraint which requires observation and reward dicts to have the same keys
 		infos[policymaker] = {"harvester_fairness" : harvester_fairness, "stock_difference" : stock_difference, "harvests" : harvests, "efforts" : efforts}
 		dones['__all__'] = False

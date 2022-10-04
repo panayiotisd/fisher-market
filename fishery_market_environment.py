@@ -31,12 +31,17 @@ class fishery_market_environment(MultiAgentEnv):
 				 policymaker_fairness_weight=1.0,
 				 policymaker_wastefulness_weight=0.0,
 				 policymaker_sustainability_weight=1.0,
+				 policymaker_leftover_budget_weight=0.0,
+				 policymaker_interventions_weight=0.0,
 				 fairness_metric='jain',
 				 valuations_noise_method=None,
 				 valuations_noise=0.01,
 				 n_valuations_bins=100,
+				 effort_noise_method=None,
+				 effort_noise=0.01,
 				 random_seed=42,
 				 compute_market_eq=False,
+				 compute_counterfactual_eq_prices=False,
 				 debug=False,
 				 ):
 		"""
@@ -70,6 +75,10 @@ class fishery_market_environment(MultiAgentEnv):
 			Weight of the wastefulness objective in policymaker's reward function.
 		policymaker_sustainability_weight : float
 			Weight of the sustainability objective in policymaker's reward function.
+		policymaker_leftover_budget_weight : float
+			Weight of the leftover budget objective in policymaker's reward function.
+		policymaker_interventions_weight : float
+			Weight of the number / size of interventions objective in policymaker's reward function.
 		fairness_metric : 'jain', 'gini', 'atkinson'
 			Use the Jain index, the Gini coefficient, or the Atkinson index to calculate fairness
 		valuations_noise_method: None, 'uniform', 'bins'
@@ -78,10 +87,16 @@ class fishery_market_environment(MultiAgentEnv):
 			If valuations_noise_method == 'uniform', then this defines the amount of noise
 		n_valuations_bins: int
 			If valuations_noise_method == 'bins', then this defines the number of bins
+		effort_noise_method: None, 'uniform'
+			If not None, then the fishery dynamics will use a noisy approximation of the effort.
+		effort_noise: float
+			If effort_noise_method == 'uniform', then this defines the amount of noise
 		random_seed : int
 			Random number generator seed
 		compute_market_eq : boolean
 			Computes the market equilibrium prices instead of using the policymaker
+		compute_counterfactual_eq_prices : boolean
+			Computes the market equilibrium prices while using the policymaker, to calculate the price difference
 		debug : boolean
 			Print debugging messages
 		"""
@@ -102,12 +117,17 @@ class fishery_market_environment(MultiAgentEnv):
 		self.policymaker_fairness_weight = policymaker_fairness_weight
 		self.policymaker_wastefulness_weight = policymaker_wastefulness_weight
 		self.policymaker_sustainability_weight = policymaker_sustainability_weight
+		self.policymaker_leftover_budget_weight = policymaker_leftover_budget_weight
+		self.policymaker_interventions_weight = policymaker_interventions_weight
 		self.fairness_metric = fairness_metric
 		self.valuations_noise_method = valuations_noise_method
 		self.valuations_noise = valuations_noise
 		self.n_valuations_bins = n_valuations_bins
+		self.effort_noise_method = effort_noise_method
+		self.effort_noise = effort_noise
 		self.random_seed = random_seed
 		self.compute_market_eq = compute_market_eq
+		self.compute_counterfactual_eq_prices = compute_counterfactual_eq_prices
 		self.debug = debug
 
 
@@ -164,6 +184,10 @@ class fishery_market_environment(MultiAgentEnv):
 			raise ValueError("policymaker_wastefulness_weight must be non-negative: " + str(self.policymaker_wastefulness_weight))
 		if (not (0 <= self.policymaker_sustainability_weight)):
 			raise ValueError("policymaker_sustainability_weight must be non-negative: " + str(self.policymaker_sustainability_weight))
+		if (not (0 <= self.policymaker_leftover_budget_weight)):
+			raise ValueError("policymaker_leftover_budget_weight must be non-negative: " + str(self.policymaker_leftover_budget_weight))
+		if (not (0 <= self.policymaker_interventions_weight)):
+			raise ValueError("policymaker_interventions_weight must be non-negative: " + str(self.policymaker_interventions_weight))
 		if (not (self.fairness_metric == 'jain' or self.fairness_metric == 'gini' or self.fairness_metric == 'atkinson')):
 			raise ValueError("Select amongst the 'jain', 'gini', or 'atkinson' fairness metrics: " + str(self.fairness_metric))
 		if self.valuations_noise_method:
@@ -173,10 +197,17 @@ class fishery_market_environment(MultiAgentEnv):
 			raise ValueError("The valuations noise has to be a float in (0, 1): " + str(self.valuations_noise))
 		if (not (isinstance(self.n_valuations_bins, int) and self.n_valuations_bins >= 2)):
 			raise ValueError("The number of bins has to be an integer and there must be at least two bins: " + str(self.n_valuations_bins))
+		if self.effort_noise_method:
+			if (not (self.effort_noise_method == 'uniform')):
+				raise ValueError("Select amongst the 'uniform' effort noise method: " + str(self.effort_noise_method))
+		if (not (isinstance(self.effort_noise, float) and effort_noise < 1.0 and effort_noise > 0)):
+			raise ValueError("The effort noise has to be a float in (0, 1): " + str(self.effort_noise))
 		if (not (isinstance(self.random_seed, int) or isinstance(self.random_seed, float))):
 			raise ValueError("The seed must be a number: " + str(self.random_seed))
 		if (not isinstance(self.compute_market_eq, bool)):
 			raise ValueError("The compute_market_eq flag must be boolean: " + str(self.compute_market_eq))
+		if (not isinstance(self.compute_counterfactual_eq_prices, bool)):
+			raise ValueError("The compute_counterfactual_eq_prices flag must be boolean: " + str(self.compute_counterfactual_eq_prices))
 		if (not isinstance(self.debug, bool)):
 			raise ValueError("The debug flag must be boolean: " + str(self.debug))
 
@@ -202,6 +233,9 @@ class fishery_market_environment(MultiAgentEnv):
 		self.history['harvester_revenue'] = np.zeros(self.n_harvesters, dtype=np.float64)
 		self.history['wasted_percentage'] = np.zeros([self.n_harvesters, self.n_resources], dtype=np.float64)
 		self.history['buyers_utility'] = np.zeros(self.n_buyers, dtype=np.float64)
+		self.history['leftover_budgets_percentage'] = np.zeros(self.n_buyers, dtype=np.float64)
+		self.history['price_difference_relative'] = np.zeros(self.n_resources, dtype=np.float64)
+		self.history['counterfactual_eq_prices'] = np.zeros(self.n_resources, dtype=np.float64)
 
 
 		# Define action and observation spaces
@@ -229,12 +263,17 @@ class fishery_market_environment(MultiAgentEnv):
 		print('policymaker_fairness_weight = ' + str(self.policymaker_fairness_weight))
 		print('policymaker_wastefulness_weight = ' + str(self.policymaker_wastefulness_weight))
 		print('policymaker_sustainability_weight = ' + str(self.policymaker_sustainability_weight))
+		print('policymaker_leftover_budget_weight = ' + str(self.policymaker_leftover_budget_weight))
+		print('policymaker_interventions_weight = ' + str(self.policymaker_interventions_weight))
 		print('fairness_metric = ' + str(self.fairness_metric))
 		print('valuations_noise_method = ' + str(self.valuations_noise_method))
 		print('valuations_noise = ' + str(self.valuations_noise))
 		print('n_valuations_bins = ' + str(self.n_valuations_bins))
+		print('effort_noise_method = ' + str(self.effort_noise_method))
+		print('effort_noise = ' + str(self.effort_noise))
 		print('random_seed = ' + str(self.random_seed))
 		print('compute_market_eq = ' + str(self.compute_market_eq))
+		print('compute_counterfactual_eq_prices = ' + str(self.compute_counterfactual_eq_prices))
 		print()
 		print('observation_space_harvester = ' + str(self.observation_space_harvester))
 		print('action_space_harvester = ' + str(self.action_space_harvester))
@@ -253,6 +292,12 @@ class fishery_market_environment(MultiAgentEnv):
 
 	def harvest_fn(self, efforts, skill_level, cur_stock, S_eq):
 		assert efforts.shape == (self.n_harvesters, self.n_resources)
+
+		if (self.effort_noise_method == 'uniform'):
+			efforts = self.uniform_noise_fn(efforts, self.effort_noise, self.n_harvesters, self.n_resources)
+			assert np.count_nonzero(efforts <= 0) == 0 and np.count_nonzero(efforts > 1) == 0, efforts
+		else:
+			raise ValueError('Invalid efforts noise method: ' + self.effort_noise_method)
 
 		efforts = np.multiply(efforts, skill_level)
 		harvests = [self.h_fn(efforts[:, resource], cur_stock[resource], S_eq[resource]) for resource in range(self.n_resources)]
@@ -312,23 +357,24 @@ class fishery_market_environment(MultiAgentEnv):
 		
 	def add_noise_fn(self, valuations):
 		if (self.valuations_noise_method == 'uniform'):
-			valuations = self.uniform_noise_fn(valuations)
-			assert np.count_nonzero(self.valuations <= 0) == 0 and np.count_nonzero(self.valuations > 1) == 0, valuations
+			valuations = self.uniform_noise_fn(valuations, self.valuations_noise, self.n_buyers, self.n_resources)
+			assert np.count_nonzero(valuations <= 0) == 0 and np.count_nonzero(valuations > 1) == 0, valuations
 			return valuations
 		elif (self.valuations_noise_method == 'bins'):
 			valuations = self.split_into_bins_fn(valuations)
-			assert np.count_nonzero(self.valuations <= 0) == 0 and np.count_nonzero(self.valuations > 1) == 0, valuations
+			assert np.count_nonzero(valuations <= 0) == 0 and np.count_nonzero(valuations > 1) == 0, valuations
 			return valuations
 		else:
 			raise ValueError('Invalid valuations noise method: ' + self.valuations_noise_method)
 
 
-	def uniform_noise_fn(self, valuations):
-		noise = np.random.uniform(-self.valuations_noise, self.valuations_noise, [self.n_buyers, self.n_resources])
-		valuations = valuations + noise
-		valuations[valuations <= 0] = 1e-6
-		valuations[valuations >= 1] = 1 - 1e-6
-		return valuations
+	@staticmethod
+	def uniform_noise_fn(values, noise_level, dim_x, dim_y):
+		noise = np.random.uniform(-noise_level, noise_level, [dim_x, dim_y])
+		values = values + noise
+		values[values <= 0] = 1e-6
+		values[values >= 1] = 1 - 1e-6
+		return values
 
 
 	def split_into_bins_fn(self, valuations):
@@ -435,7 +481,15 @@ class fishery_market_environment(MultiAgentEnv):
 
 		assert buyers_utility.shape == (self.n_buyers,)
 
-		return sold_resources, buyers_utility
+
+		allocation = np.transpose(allocation)
+		used_budgets = np.sum(allocation * prices, 1)
+		leftover_budgets = budgets - used_budgets
+		leftover_budgets[np.absolute(leftover_budgets) <= 0.0001 ] = 0	# Account for precision errors 
+		assert leftover_budgets.all() >= 0, 'budgets = ' + str(budgets) + '\n used_budgets = ' + str(used_budgets) + '\n leftover_budgets = ' + str(leftover_budgets)
+
+
+		return sold_resources, buyers_utility, used_budgets
 
 
 	@staticmethod
@@ -549,17 +603,11 @@ class fishery_market_environment(MultiAgentEnv):
 		assert np.count_nonzero(prices < 0) == 0, prices
 
 		allocation = np.transpose(allocation)
-		used_budget = np.sum(allocation * prices, 1)
-		assert np.allclose(used_budget, budgets, rtol=0, atol=0.05), 'budgets = ' + str(budgets) + '\n used_budget = ' + str(used_budget)  # At market equilibrium, the budget is exhausted # FIXME: Enable
+		used_budgets = np.sum(allocation * prices, 1)
+		assert np.allclose(used_budgets, budgets, rtol=0, atol=0.05), 'budgets = ' + str(budgets) + '\n used_budgets = ' + str(used_budgets)  # At market equilibrium, the budget is exhausted # FIXME: Enable
 
 
-		# leftover_budget = np.sum(cumulative_harvest * prices, 0) - np.sum(budgets)
-		# print("allocation = \n" + str(allocation) + "\n")
-		# print("prices = \n" + str(prices) + "\n")
-		# print("leftover_budget = \n" + str(leftover_budget) + "\n")
-
-
-		return sold_resources, buyers_utility, prices
+		return sold_resources, buyers_utility, prices, used_budgets
 
 
 
@@ -582,25 +630,30 @@ class fishery_market_environment(MultiAgentEnv):
 
 
 
-	def policymaker_reward_fn(self, harvester_rewards, harvester_revenue, wasted_percentage, cur_stock, S_eq, buyers_utility):
+	def policymaker_reward_fn(self, harvester_rewards, harvester_revenue, wasted_percentage, cur_stock, S_eq, buyers_utility, leftover_budgets_percentage, price_difference_relative):
 		assert harvester_rewards.shape == (self.n_harvesters,)
 		assert harvester_revenue.shape == (self.n_harvesters,)
 		assert wasted_percentage.shape == (self.n_harvesters, self.n_resources)
 		assert cur_stock.shape == (self.n_resources,)
 		assert S_eq.shape == (self.n_resources,)
 		assert buyers_utility.shape == (self.n_buyers,)
+		assert leftover_budgets_percentage.shape == (self.n_buyers,)
+		assert price_difference_relative.shape == (self.n_resources,)
+
 
 		harvesters_social_welfare = self.harvesters_social_welfare_fn(harvester_revenue)	# Maximize harvesters' social welfare
 		fairness = self.fairness_fn(harvester_rewards)	# Maximize harvesters' fairness
 		wastefulness_cost = self.wastefulness_fn(wasted_percentage)	# Minimize harvesters' wasted harvest
 		sustainability_cost, stock_difference = self.sustainability_fn(cur_stock, S_eq)	# Ensure all resources are harvested sustainably
 		buyers_social_welfare = self.buyers_social_welfare_fn(buyers_utility)	# Maximize buyers' social welfare
+		interventions_cost = self.interventions_cost_fn(price_difference_relative)	# Minimize the size / number of interventions
 
 		reward= self.policymaker_harvesters_welfare_weight * (1.0 / self.n_harvesters) * harvesters_social_welfare + \
 				self.policymaker_fairness_weight * fairness + \
 				self.policymaker_wastefulness_weight * wastefulness_cost + \
 				self.policymaker_sustainability_weight * sustainability_cost + \
-				self.policymaker_buyers_welfare_weight * (1.0 / self.n_buyers) * buyers_social_welfare
+				self.policymaker_buyers_welfare_weight * (1.0 / self.n_buyers) * buyers_social_welfare + \
+				self.policymaker_interventions_weight * interventions_cost
 
 		if self.debug:
 			print()
@@ -612,6 +665,7 @@ class fishery_market_environment(MultiAgentEnv):
 			print('sustainability_cost = \n' + str(sustainability_cost))
 			print('stock_difference = \n' + str(stock_difference))
 			print('buyers_social_welfare = \n' + str(buyers_social_welfare))
+			print('interventions_cost = \n' + str(interventions_cost))
 			print("-------------------------------------")
 			print()
 
@@ -697,6 +751,34 @@ class fishery_market_environment(MultiAgentEnv):
 		return sustainability_cost, stock_difference
 
 
+	def interventions_cost_fn(self, price_difference_relative):
+		if np.isnan(price_difference_relative).any():
+			assert np.isnan(price_difference_relative).all(), price_difference_relative
+			return 0
+		if self.policymaker_interventions_weight <= 0:
+			return 0
+
+		return -np.sum(price_difference_relative)	# -Sum(|i-j|)
+
+		# FIXME: np.exp can result to inf!!!!! Place a cap in the max value
+
+		# Exponential of the second biggest price difference
+		# return -np.max(np.expm1(price_difference_relative)) # 1 - exp(|i-j| / |j|)
+
+		# Triple exponential of the biggest price difference
+		# return -np.max(np.exp(np.exp(np.exp(price_difference_relative))) - np.exp(np.exp(1)))
+
+		# Triple exponential of the average price difference
+		# return -np.average(np.exp(np.exp(np.exp(price_difference_relative))) - np.exp(np.exp(1)))
+
+		# Triple exponential of the second biggest price difference
+		# if np.all(price_difference_relative == price_difference_relative[0]):
+		# 	second_max = np.max(price_difference_relative)
+		# else:
+		# 	second_max = np.max(np.delete(price_difference_relative, np.where(price_difference_relative == np.max(price_difference_relative))))
+		# return -(np.exp(np.exp(np.exp(second_max))) - np.exp(np.exp(1)))
+
+
 	@staticmethod
 	def social_mobility_fn():
 		pass
@@ -709,17 +791,24 @@ class fishery_market_environment(MultiAgentEnv):
 		assert budgets.shape == (self.n_buyers,)
 		assert valuations.shape == (self.n_buyers, self.n_resources)
 
+		eq_prices = np.full(self.n_resources, np.nan)
+
 		cumulative_harvest = np.sum(harvests, axis=0)
 		assert cumulative_harvest.shape == (self.n_resources,)
 
+		successful_allocation = False
 		tolerance = 1e-3
 		counter = 4
 		while True:
 			try:
 				if not self.compute_market_eq:
-					sold_resources, buyers_utility = self.optimal_allocation_given_prices_fn(prices, cumulative_harvest, budgets, valuations)
+					if not successful_allocation:
+						sold_resources, buyers_utility, used_budgets = self.optimal_allocation_given_prices_fn(prices, cumulative_harvest, budgets, valuations)
+						successful_allocation = True
+					if self.compute_counterfactual_eq_prices or (self.policymaker_interventions_weight > 0):
+						_, _, eq_prices, _ = self.fisher_market_equilibrium_calculator_fn(cumulative_harvest, budgets, valuations, tolerance)
 				else:
-					sold_resources, buyers_utility, prices = self.fisher_market_equilibrium_calculator_fn(cumulative_harvest, budgets, valuations, tolerance)
+					sold_resources, buyers_utility, prices, used_budgets = self.fisher_market_equilibrium_calculator_fn(cumulative_harvest, budgets, valuations, tolerance)
 			except ValueError as err:
 				# Sometimes we might get a negative value in the log
 				counter = counter - 1
@@ -785,7 +874,7 @@ class fishery_market_environment(MultiAgentEnv):
 
 		harvester_revenue = np.copy(harvester_rewards)
 
-		# Next, we calculate the cost of wasting resources
+		# Next, we calculate the cost of wasting resources (wasted resources represent over-supply)
 		harvest_relative = np.copy(harvests).astype(np.float64)
 		for resource in range(self.n_resources):
 			if cumulative_harvest[resource] == 0:
@@ -796,12 +885,31 @@ class fishery_market_environment(MultiAgentEnv):
 		for harvester in range(self.n_harvesters):
 			wasted = harvests[harvester] - (harvest_relative[harvester] * sold_resources)	# harvested - sold
 			wasted = np.true_divide(wasted, harvests[harvester], where=(harvests[harvester]!=0))	# Percentage of wasted
+			wasted[np.absolute(wasted) <= 0.0001 ] = 0	# Account for precision errors 
 			wasted_percentage[harvester] = np.copy(wasted)
 			wasted *= self.harvester_wastefulness_cost
 
 			harvester_rewards[harvester] -= np.sum(wasted)
 
-		return harvester_rewards, harvester_revenue, wasted_percentage, buyers_utility, prices
+		# We calculate over-demand, by computing the leftover budget
+		leftover_budgets = budgets - used_budgets
+		leftover_budgets[np.absolute(leftover_budgets) <= 0.0001 ] = 0	# Account for precision errors 
+		leftover_budgets_percentage = np.true_divide(leftover_budgets, budgets, where=(budgets!=0))	# Percentage of leftover budget
+
+		# We calculate the relative price difference (policymaker vs. equilibrium prices)
+		price_difference_relative = np.full(self.n_resources, np.nan)
+		if self.compute_counterfactual_eq_prices or (self.policymaker_interventions_weight > 0):
+			price_difference = np.absolute(prices - eq_prices)
+			price_difference[np.absolute(price_difference) <= 0.0001 ] = 0	# Account for precision errors 
+			assert np.count_nonzero(prices < 0) == 0, prices
+			assert np.count_nonzero(eq_prices < 0) == 0, eq_prices
+			# denominator = np.maximum(prices, eq_prices)
+			# denominator = eq_prices
+			# price_difference_relative = np.true_divide(price_difference, denominator, where=(denominator!=0))
+			price_difference_relative = price_difference # FIXME: This is no longer relative! Rename
+
+
+		return harvester_rewards, harvester_revenue, wasted_percentage, buyers_utility, prices, leftover_budgets_percentage, price_difference_relative, eq_prices
 
 
 
@@ -831,6 +939,9 @@ class fishery_market_environment(MultiAgentEnv):
 		self.history['harvester_revenue'] = np.zeros(self.n_harvesters, dtype=np.float64)
 		self.history['wasted_percentage'] = np.zeros([self.n_harvesters, self.n_resources], dtype=np.float64)
 		self.history['buyers_utility'] = np.zeros(self.n_buyers, dtype=np.float64)
+		self.history['leftover_budgets_percentage'] = np.zeros(self.n_buyers, dtype=np.float64)
+		self.history['price_difference_relative'] = np.zeros(self.n_resources, dtype=np.float64)
+		self.history['counterfactual_eq_prices'] = np.zeros(self.n_resources, dtype=np.float64)
 
 		
 		init_state = self.observation_space_harvester.sample()	# Sample a random state
@@ -910,7 +1021,7 @@ class fishery_market_environment(MultiAgentEnv):
 
 
 		# Calculate policymaker 's reward for the previous step.
-		policymaker_reward, harvester_fairness, stock_difference = self.policymaker_reward_fn(self.history['harvester_rewards'], self.history['harvester_revenue'], self.history['wasted_percentage'], self.cur_stock, self.S_eq, self.history['buyers_utility'])
+		policymaker_reward, harvester_fairness, stock_difference = self.policymaker_reward_fn(self.history['harvester_rewards'], self.history['harvester_revenue'], self.history['wasted_percentage'], self.cur_stock, self.S_eq, self.history['buyers_utility'], self.history['leftover_budgets_percentage'], self.history['price_difference_relative'])
 
 		# Calculate total harvest per resource
 		harvests = self.harvest_fn(efforts, self.skill_level, self.cur_stock, self.S_eq)	# n_harvesters * n_resources
@@ -1000,7 +1111,7 @@ class fishery_market_environment(MultiAgentEnv):
 
 		self.history['prices'] = np.copy(prices)	# Store prices to calculate rewards in the harvest step
 
-		harvester_rewards, harvester_revenue, wasted_percentage, buyers_utility, eq_prices = self.harvesters_reward_fn(prices, self.history['harvests'], self.budgets, self.valuations)
+		harvester_rewards, harvester_revenue, wasted_percentage, buyers_utility, eq_prices, leftover_budgets_percentage, price_difference_relative, counterfactual_eq_prices = self.harvesters_reward_fn(prices, self.history['harvests'], self.budgets, self.valuations)
 
 		if self.compute_market_eq:
 			self.history['prices'] = np.copy(eq_prices)
@@ -1015,6 +1126,9 @@ class fishery_market_environment(MultiAgentEnv):
 		self.history['harvester_revenue'] = np.copy(harvester_revenue)
 		self.history['wasted_percentage'] = np.copy(wasted_percentage)
 		self.history['buyers_utility'] = np.copy(buyers_utility)
+		self.history['leftover_budgets_percentage'] = np.copy(leftover_budgets_percentage)
+		self.history['price_difference_relative'] = np.copy(price_difference_relative)
+		self.history['counterfactual_eq_prices'] = np.copy(counterfactual_eq_prices)
 
 
 		# Set returns:
@@ -1028,7 +1142,7 @@ class fishery_market_environment(MultiAgentEnv):
 		for i, harvester in enumerate(self.l_harvesters):
 			states[harvester] = np.concatenate([prices, self.history['efforts'][harvester], [harvester_rewards[i]]])
 			rewards[harvester] = harvester_rewards[i]
-			infos[harvester] = { "harvester_rewards": harvester_rewards, "harvester_revenue": harvester_revenue, "wasted_percentage": wasted_percentage, "buyers_utility": buyers_utility, "prices": prices}
+			infos[harvester] = { "harvester_rewards": harvester_rewards, "harvester_revenue": harvester_revenue, "wasted_percentage": wasted_percentage, "buyers_utility": buyers_utility, "prices": prices, "leftover_budgets_percentage": leftover_budgets_percentage, "price_difference_relative": price_difference_relative, "counterfactual_eq_prices": counterfactual_eq_prices}
 		
 
 		dones['__all__'] = False
@@ -1055,6 +1169,9 @@ class fishery_market_environment(MultiAgentEnv):
 			print('harvester_revenue = \n' + str(harvester_revenue))
 			print('wasted_percentage = \n' + str(wasted_percentage))
 			print('buyers_utility = \n' + str(buyers_utility))
+			print('leftover_budgets_percentage = \n' + str(leftover_budgets_percentage))
+			print('counterfactual_eq_prices = \n' + str(counterfactual_eq_prices))
+			print('price_difference_relative = \n' + str(price_difference_relative))
 			print()
 			print()
 			print('harvesters_rewards = \n' + str(rewards))

@@ -67,12 +67,17 @@ def generate_env_fn(env_context=None):
                                       policymaker_fairness_weight = policymaker_fairness_weight,
                                       policymaker_wastefulness_weight = policymaker_wastefulness_weight,
                                       policymaker_sustainability_weight = policymaker_sustainability_weight,
+                                      policymaker_leftover_budget_weight = policymaker_leftover_budget_weight,
+                                      policymaker_interventions_weight = policymaker_interventions_weight,
                                       fairness_metric = fairness_metric,
                                       valuations_noise_method = valuations_noise_method,
                                       valuations_noise = valuations_noise,
                                       n_valuations_bins = n_valuations_bins,
+                                      effort_noise_method = effort_noise_method,
+                                      effort_noise = effort_noise,
                                       random_seed = random_seed,
                                       compute_market_eq = compute_market_eq,
+                                      compute_counterfactual_eq_prices = compute_counterfactual_eq_prices,
                                       debug = debug)
 
 
@@ -110,12 +115,17 @@ class MyCallbacks(DefaultCallbacks):
             'policymaker_fairness_weight' : policymaker_fairness_weight,
             'policymaker_wastefulness_weight' : policymaker_wastefulness_weight,
             'policymaker_sustainability_weight' : policymaker_sustainability_weight,
+            'policymaker_leftover_budget_weight' : policymaker_leftover_budget_weight,
+            'policymaker_interventions_weight' : policymaker_interventions_weight,
             'fairness_metric' : fairness_metric,
             'valuations_noise_method' : valuations_noise_method,
             'valuations_noise' : valuations_noise,
             'n_valuations_bins' : n_valuations_bins,
+            'effort_noise_method' : effort_noise_method,
+            'effort_noise' : effort_noise,
             'random_seed' : random_seed,
             'compute_market_eq' : compute_market_eq,
+            'compute_counterfactual_eq_prices' : compute_counterfactual_eq_prices,
             'num_workers' : num_workers,
             'n_episodes' : n_episodes,
             'train_algo' : train_algo,
@@ -152,12 +162,17 @@ class MyCallbacks(DefaultCallbacks):
             'policymaker_fairness_weight' : policymaker_fairness_weight,
             'policymaker_wastefulness_weight' : policymaker_wastefulness_weight,
             'policymaker_sustainability_weight' : policymaker_sustainability_weight,
+            'policymaker_leftover_budget_weight' : policymaker_leftover_budget_weight,
+            'policymaker_interventions_weight' : policymaker_interventions_weight,
             'fairness_metric' : fairness_metric,
             'valuations_noise_method' : valuations_noise_method,
             'valuations_noise' : valuations_noise,
             'n_valuations_bins' : n_valuations_bins,
+            'effort_noise_method' : effort_noise_method,
+            'effort_noise' : effort_noise,
             'random_seed' : random_seed,
             'compute_market_eq' : compute_market_eq,
+            'compute_counterfactual_eq_prices' : compute_counterfactual_eq_prices,
             'num_workers' : num_workers,
             'n_episodes' : n_episodes,
             'train_algo' : train_algo,
@@ -203,6 +218,9 @@ class MyCallbacks(DefaultCallbacks):
         episode.user_data["wasted_percentage"] = []
         episode.user_data["buyers_utility"] = []
         episode.user_data["prices"] = []
+        episode.user_data["leftover_budgets_percentage"] = []
+        episode.user_data["price_difference_relative"] = []
+        episode.user_data["counterfactual_eq_prices"] = []
 
         # Flag to track the harvest and policymaking steps to get the appropriate metrics from the info dictionaries
         self.harvesting_step = True # The environment starts with a harvest step
@@ -241,6 +259,9 @@ class MyCallbacks(DefaultCallbacks):
             episode.user_data["wasted_percentage"].append(info_dict["wasted_percentage"])
             episode.user_data["buyers_utility"].append(info_dict["buyers_utility"])
             episode.user_data["prices"].append(info_dict["prices"])
+            episode.user_data["leftover_budgets_percentage"].append(info_dict["leftover_budgets_percentage"])
+            episode.user_data["price_difference_relative"].append(info_dict["price_difference_relative"])
+            episode.user_data["counterfactual_eq_prices"].append(info_dict["counterfactual_eq_prices"])
 
         elif not self.harvesting_step:
             assert self.first_step == False
@@ -293,6 +314,9 @@ class MyCallbacks(DefaultCallbacks):
         wasted_percentage = episode.user_data["wasted_percentage"]
         buyers_utility = episode.user_data["buyers_utility"]
         prices = episode.user_data["prices"]
+        leftover_budgets_percentage = episode.user_data["leftover_budgets_percentage"]
+        price_difference_relative = episode.user_data["price_difference_relative"]
+        counterfactual_eq_prices = episode.user_data["counterfactual_eq_prices"]
 
         # TODO: Calculate episode metrics
         harvester_cumulative_reward = np.copy(agent_rewards)
@@ -315,7 +339,10 @@ class MyCallbacks(DefaultCallbacks):
                       'harvester_revenue': harvester_revenue,
                       'wasted_percentage': wasted_percentage,
                       'buyers_utility': buyers_utility,
-                      'prices': prices})
+                      'prices': prices,
+                      'leftover_budgets_percentage': leftover_budgets_percentage,
+                      'price_difference_relative': price_difference_relative,
+                      'counterfactual_eq_prices': counterfactual_eq_prices})
 
 
         # Save periodically and at the end
@@ -443,6 +470,7 @@ parser.add_argument('--n_buyers', default=8, type=int)
 parser.add_argument('--n_resources', default=4, type=int)
 parser.add_argument('--Ms', default=0.8, type=float)
 parser.add_argument('--compute_market_eq', default=False, type=str2bool)
+parser.add_argument('--compute_counterfactual_eq_prices', default=False, type=str2bool)
 
 parser.add_argument('--harvester_wastefulness_cost', default=0.0, type=float)
 parser.add_argument('--policymaker_harvesters_welfare_weight', default=1.0, type=float)
@@ -450,11 +478,15 @@ parser.add_argument('--policymaker_buyers_welfare_weight', default=1.0, type=flo
 parser.add_argument('--policymaker_fairness_weight', default=1.0, type=float)
 parser.add_argument('--policymaker_wastefulness_weight', default=0.0, type=float)
 parser.add_argument('--policymaker_sustainability_weight', default=1.0, type=float)
+parser.add_argument('--policymaker_leftover_budget_weight', default=0.0, type=float)
+parser.add_argument('--policymaker_interventions_weight', default=0.0, type=float)
 parser.add_argument('--fairness_metric', default='jain', type=str, choices={'jain', 'gini', 'atkinson'})
 
 parser.add_argument('--valuations_noise_method', default=None, type=str, choices={'uniform', 'bins'})
 parser.add_argument('--valuations_noise', default=0.01, type=float)
 parser.add_argument('--n_valuations_bins', default=100, type=int)
+parser.add_argument('--effort_noise_method', default=None, type=str, choices={'uniform'})
+parser.add_argument('--effort_noise', default=0.01, type=float)
 
 # Training arguments
 parser.add_argument('--n_episodes', default=2400, type=int)
@@ -480,6 +512,7 @@ print("n_buyers = " + str(args.n_buyers))
 print("n_resources = " + str(args.n_resources))
 print("Ms = " + str(args.Ms))
 print("compute_market_eq = " + str(args.compute_market_eq))
+print("compute_counterfactual_eq_prices = " + str(args.compute_counterfactual_eq_prices))
 
 print("harvester_wastefulness_cost = " + str(args.harvester_wastefulness_cost))
 print("policymaker_harvesters_welfare_weight = " + str(args.policymaker_harvesters_welfare_weight))
@@ -487,11 +520,15 @@ print("policymaker_buyers_welfare_weight = " + str(args.policymaker_buyers_welfa
 print("policymaker_fairness_weight = " + str(args.policymaker_fairness_weight))
 print("policymaker_wastefulness_weight = " + str(args.policymaker_wastefulness_weight))
 print("policymaker_sustainability_weight = " + str(args.policymaker_sustainability_weight))
+print("policymaker_leftover_budget_weight = " + str(args.policymaker_leftover_budget_weight))
+print("policymaker_interventions_weight = " + str(args.policymaker_interventions_weight))
 print("fairness_metric = " + str(args.fairness_metric))
 
 print("valuations_noise_method = " + str(args.valuations_noise_method))
 print("valuations_noise = " + str(args.valuations_noise))
 print("n_valuations_bins = " + str(args.n_valuations_bins))
+print("effort_noise_method = " + str(args.effort_noise_method))
+print("effort_noise = " + str(args.effort_noise))
 
 print("n_episodes = " + str(args.n_episodes))
 print("max_steps = " + str(args.max_steps))
@@ -526,13 +563,18 @@ policymaker_buyers_welfare_weight = args.policymaker_buyers_welfare_weight  # de
 policymaker_fairness_weight = args.policymaker_fairness_weight  # default: 1.0
 policymaker_wastefulness_weight = args.policymaker_wastefulness_weight  # default: 0.0
 policymaker_sustainability_weight = args.policymaker_sustainability_weight  # default: 1.0
+policymaker_leftover_budget_weight = args.policymaker_leftover_budget_weight  # default: 0.0
+policymaker_interventions_weight = args.policymaker_interventions_weight  # default: 0.0
 fairness_metric = args.fairness_metric  # default: 'jain'
 
 valuations_noise_method = args.valuations_noise_method  # default: None
 valuations_noise = args.valuations_noise  # default: 0.01
 n_valuations_bins = args.n_valuations_bins  # default: 100
+effort_noise_method = args.effort_noise_method  # default: None
+effort_noise = args.effort_noise  # default: 0.01
 
 compute_market_eq = args.compute_market_eq  #  default: False
+compute_counterfactual_eq_prices = args.compute_counterfactual_eq_prices  #  default: False
 random_seed = args.random_seed # default: 42
 debug = args.debug  # default: False
 

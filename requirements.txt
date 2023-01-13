@@ -1,0 +1,4 @@
+numpy==1.19.2
+tensorflow==2.4.1
+gym==0.18.0
+ray[rllib]==0.8.7

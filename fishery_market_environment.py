@@ -1,3 +1,17 @@
+# **************************************************************************************************************
+# Panayiotis Danassis, Aris Filos-Ratsikas, Haipeng Chen, Milind Tambe, Boi Faltings. 2023.
+# AI-driven Prices for Externalities and Sustainability in Production Markets
+# In Proceedings of the 22nd International Conference on Autonomous Agents and Multiagent Systems (AAMAS 2023)
+# https://arxiv.org/abs/2106.06060
+# 
+# Requirements:
+# Python 3.8.5
+# numpy v. 1.19.2
+# tensorflow v. 2.4.1
+# ray v. 0.8.7
+# gym v. 0.18.0
+# **************************************************************************************************************
+
 import gym
 import numpy as np
 import random as rnd

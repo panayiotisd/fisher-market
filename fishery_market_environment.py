@@ -145,9 +145,6 @@ class fishery_market_environment(MultiAgentEnv):
 		self.debug = debug
 
 
-		########################################################
-		# TODO: VERIFY THE SANITY OF THE VALUES!
-		########################################################
 		self.min_price = 0.0
 		self.max_price = np.inf
 		self.min_effort = 0.0
@@ -352,7 +349,7 @@ class fishery_market_environment(MultiAgentEnv):
 
 
 	def bugdet_fn(self):
-		np.random.seed(rnd.randint(0, 9999)) # FIXME: Replace with below
+		np.random.seed(rnd.randint(0, 9999))
 		if self.valuations_noise_method:
 			np.random.seed(self.cur_step)
 		res = np.random.rand(self.n_buyers)
@@ -361,7 +358,7 @@ class fishery_market_environment(MultiAgentEnv):
 
 
 	def valuations_fn(self):
-		np.random.seed(rnd.randint(0, 9999)) # FIXME: Replace with below
+		np.random.seed(rnd.randint(0, 9999))
 		if self.valuations_noise_method:
 			np.random.seed(self.cur_step)
 		res = np.random.rand(self.n_buyers, self.n_resources)
@@ -591,7 +588,7 @@ class fishery_market_environment(MultiAgentEnv):
 
 		sold_resources = np.sum(allocation, 1)
 		assert sold_resources.shape == (self.n_resources,)
-		assert np.allclose(sold_resources, cumulative_harvest, rtol=0, atol=0.05), 'cumulative_harvest = ' + str(cumulative_harvest) + '\n sold_resources = ' + str(sold_resources) # FIXME: Enable
+		assert np.allclose(sold_resources, cumulative_harvest, rtol=0, atol=0.05), 'cumulative_harvest = ' + str(cumulative_harvest) + '\n sold_resources = ' + str(sold_resources) 
 
 		sold_resources = np.copy(cumulative_harvest) # At market equilibrium, we sell the entire harvest
 
@@ -618,7 +615,7 @@ class fishery_market_environment(MultiAgentEnv):
 
 		allocation = np.transpose(allocation)
 		used_budgets = np.sum(allocation * prices, 1)
-		assert np.allclose(used_budgets, budgets, rtol=0, atol=0.05), 'budgets = ' + str(budgets) + '\n used_budgets = ' + str(used_budgets)  # At market equilibrium, the budget is exhausted # FIXME: Enable
+		assert np.allclose(used_budgets, budgets, rtol=0, atol=0.05), 'budgets = ' + str(budgets) + '\n used_budgets = ' + str(used_budgets)  # At market equilibrium, the budget is exhausted 
 
 
 		return sold_resources, buyers_utility, prices, used_budgets
@@ -775,7 +772,6 @@ class fishery_market_environment(MultiAgentEnv):
 		return -np.sum(price_difference_relative)	# -Sum(|i-j|)
 
 		# FIXME: np.exp can result to inf!!!!! Place a cap in the max value
-
 		# Exponential of the second biggest price difference
 		# return -np.max(np.expm1(price_difference_relative)) # 1 - exp(|i-j| / |j|)
 
